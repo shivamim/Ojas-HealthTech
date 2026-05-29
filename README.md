@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Ojas V3 — Production-Ready Post-Discharge Recovery Monitoring
 
 ## Zero-Cost Demo Setup
@@ -70,3 +71,7 @@ FRONTEND_URL=https://your-frontend.vercel.app
 WHATSAPP_API_KEY=          # leave empty for simulation
 WHATSAPP_API_URL=https://waba.360dialog.io/v1/messages
 ```
+=======
+# Ojas-HealthTech
+Testing
+>>>>>>> 912e6a9fc7b58ee9c6a38d197730b39ee5494940
