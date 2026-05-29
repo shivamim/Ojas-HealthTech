@@ -1,8 +1,6 @@
 #!/bin/bash
 set -e
 
-cd backend
-
 echo "=== Creating tables ==="
 python -c "
 import asyncio
