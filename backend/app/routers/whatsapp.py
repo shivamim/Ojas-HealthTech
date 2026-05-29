@@ -43,7 +43,7 @@ async def send_checkin(patient_id: str, day: int, request: Request, db: AsyncSes
 async def get_whatsapp_status(patient_id: str, request: Request, db: AsyncSession = Depends(get_db)):
     hospital_id = require_tenant(request)
 
-    result = await db.execute(select(WhatsAppMessageLog).where(WhatsAppMessageLog.patient_id == __import__('uuid').UUID(patient_id)).order_by(WhatsAppMessageLog.sent_at.desc())))
+    result = await db.execute(select(WhatsAppMessageLog).where(WhatsAppMessageLog.patient_id == __import__('uuid').UUID(patient_id)).order_by(WhatsAppMessageLog.sent_at.desc()))
     logs = result.scalars().all()
 
     return [{
