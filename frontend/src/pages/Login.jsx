@@ -17,15 +17,17 @@ const Login = () => {
     e.preventDefault()
     setError('')
     try {
+      // useLogin hook stores tokens in localStorage
+      // Pass full response (not just data.user) so AuthContext gets tokens too
       const data = await loginMutation.mutateAsync({ email, password })
-      login(data.user)
+      login(data)
       if (data.user.role === 'SUPER_ADMIN') {
         navigate('/superadmin/hospitals')
       } else {
         navigate('/dashboard')
       }
     } catch (err) {
-      setError(err.response?.data?.detail || 'Login failed')
+      setError(err.response?.data?.detail || 'Login failed. Check your credentials.')
     }
   }
 
