@@ -1,6 +1,6 @@
 from enum import Enum
 from functools import wraps
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 
 class Permission(Enum):
     PATIENT_CREATE = "patient:create"
@@ -10,7 +10,6 @@ class Permission(Enum):
     REPORT_GENERATE = "report:generate"
     USER_MANAGE = "user:manage"
     HOSPITAL_MANAGE = "hospital:manage"
-    SUPERADMIN = "superadmin"
 
 PERMISSION_MAP = {
     "SUPER_ADMIN": [p for p in Permission],
@@ -29,17 +28,29 @@ def require_permission(permission: Permission):
     def decorator(func):
         @wraps(func)
         async def wrapper(*args, **kwargs):
-            request = kwargs.get("request") or args[0] if args else None
+            # Extract request from kwargs or args
+            request = kwargs.get("request")
             if not request:
                 for arg in args:
-                    if hasattr(arg, "state"):
+                    if isinstance(arg, Request):
                         request = arg
                         break
+                    # Check if it's a Pydantic model that might have request
+                    if hasattr(arg, "request"):
+                        request = arg.request
+                        break
 
-            role = getattr(request.state, "role", None) if request else None
+            if not request:
+                raise HTTPException(403, "Request object not found")
+
+            role = getattr(request.state, "role", None)
+            if not role:
+                raise HTTPException(403, "Role not found in request")
+
             perms = PERMISSION_MAP.get(role, [])
             if permission not in perms:
                 raise HTTPException(403, "Insufficient permissions")
+            
             return await func(*args, **kwargs)
         return wrapper
     return decorator
