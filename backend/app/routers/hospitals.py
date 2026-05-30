@@ -23,13 +23,19 @@ class HospitalUpdate(BaseModel):
 @router.get("/me")
 async def get_my_hospital(request: Request, db: AsyncSession = Depends(get_db)):
     hospital_id = require_tenant(request)
+    
+    # FIX: Super Admin ke liye first hospital return karo ya error do
     if not hospital_id:
-        raise HTTPException(400, "No hospital context")
-
-    result = await db.execute(select(Hospital).where(Hospital.id == uuid.UUID(hospital_id)))
-    h = result.scalar_one_or_none()
-    if not h:
-        raise HTTPException(404, "Hospital not found")
+        # Super Admin ke liye first active hospital return karo
+        result = await db.execute(select(Hospital).where(Hospital.is_active == True).limit(1))
+        h = result.scalar_one_or_none()
+        if not h:
+            raise HTTPException(404, "No hospital found")
+    else:
+        result = await db.execute(select(Hospital).where(Hospital.id == uuid.UUID(hospital_id)))
+        h = result.scalar_one_or_none()
+        if not h:
+            raise HTTPException(404, "Hospital not found")
 
     return {
         "id": str(h.id),
@@ -47,6 +53,11 @@ async def get_my_hospital(request: Request, db: AsyncSession = Depends(get_db)):
 @router.put("/me")
 async def update_my_hospital(req: HospitalUpdate, request: Request, db: AsyncSession = Depends(get_db)):
     hospital_id = require_tenant(request)
+    
+    # FIX: Super Admin cannot update via /me
+    if not hospital_id:
+        raise HTTPException(403, "Super Admin must use /superadmin/hospitals endpoint")
+    
     result = await db.execute(select(Hospital).where(Hospital.id == uuid.UUID(hospital_id)))
     h = result.scalar_one_or_none()
     if not h:
