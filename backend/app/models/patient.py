@@ -1,10 +1,9 @@
 import uuid
 from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Float, Text
-from sqlalchemy import String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.core.database import Base
-from datetime import datetime
+from datetime import datetime, timezone
 
 class Patient(Base):
     __tablename__ = "patients"
@@ -29,7 +28,7 @@ class Patient(Base):
     risk_score = Column(Integer, default=0)
     risk_level = Column(String, default="LOW")
     readmission_risk = Column(String, default="LOW")
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     hospital = relationship("Hospital", back_populates="patients")
     checkins = relationship("CheckIn", back_populates="patient", cascade="all, delete")
