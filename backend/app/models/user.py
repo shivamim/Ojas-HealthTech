@@ -1,10 +1,9 @@
 import uuid
-from sqlalchemy import Column, String, ForeignKey, DateTime, Enum
-from sqlalchemy import String
+from sqlalchemy import Column, String, ForeignKey, DateTime
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.core.database import Base
-from datetime import datetime
+from datetime import datetime, timezone
 
 class User(Base):
     __tablename__ = "users"
@@ -16,6 +15,6 @@ class User(Base):
     role = Column(String, default="COORDINATOR")  # SUPER_ADMIN, HOSPITAL_ADMIN, COORDINATOR, DOCTOR
     hospital_id = Column(UUID(as_uuid=True), ForeignKey("hospitals.id"), nullable=True)
     is_active = Column(String, default="true")
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     hospital = relationship("Hospital", back_populates="users")
