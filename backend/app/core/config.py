@@ -1,6 +1,7 @@
 import os
 import sys
 import secrets
+from typing import List
 from pydantic_settings import BaseSettings
 from dotenv import load_dotenv
 
@@ -10,7 +11,7 @@ _IS_PROD = os.getenv("ENVIRONMENT", "development").lower() == "production"
 
 
 class Settings(BaseSettings):
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql+asyncpg://user:pass@localhost/ojas")
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./ojas.db")
     SECRET_KEY: str = os.getenv("SECRET_KEY", "")
     ENCRYPTION_KEY: str = os.getenv("ENCRYPTION_KEY", "")
     ENCRYPTION_SALT: str = os.getenv("ENCRYPTION_SALT", "ojas-salt-2026")
@@ -21,33 +22,33 @@ class Settings(BaseSettings):
     WHATSAPP_API_KEY: str = os.getenv("WHATSAPP_API_KEY", "")
     WHATSAPP_API_URL: str = os.getenv("WHATSAPP_API_URL", "https://waba.360dialog.io/v1/messages")
     ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
+    RATE_LIMIT: str = os.getenv("RATE_LIMIT", "100/minute")
+    DATABASE_POOL_SIZE: int = int(os.getenv("DATABASE_POOL_SIZE", "5"))
+    DATABASE_MAX_OVERFLOW: int = int(os.getenv("DATABASE_MAX_OVERFLOW", "0"))
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-        # ── SECRET_KEY ───────────────────────────────────────────────────
         if not self.SECRET_KEY:
             if _IS_PROD:
-                print("FATAL: SECRET_KEY env var is required in production.", file=sys.stderr)
+                print("FATAL: SECRET_KEY required in production", file=sys.stderr)
                 sys.exit(1)
-            import warnings
             self.SECRET_KEY = secrets.token_urlsafe(32)
-            warnings.warn("SECRET_KEY auto-generated — resets every restart! Set it in env vars.")
+            print("WARNING: Auto-generated SECRET_KEY", file=sys.stderr)
 
-        # ── ENCRYPTION_KEY ───────────────────────────────────────────────
         if not self.ENCRYPTION_KEY:
             if _IS_PROD:
-                print("FATAL: ENCRYPTION_KEY env var is required in production.", file=sys.stderr)
+                print("FATAL: ENCRYPTION_KEY required in production", file=sys.stderr)
                 sys.exit(1)
-            import warnings
-            self.ENCRYPTION_KEY = secrets.token_hex(16)  # exactly 32 hex chars
-            warnings.warn("ENCRYPTION_KEY auto-generated — encrypted data unreadable after restart!")
+            self.ENCRYPTION_KEY = secrets.token_hex(16)
+            print("WARNING: Auto-generated ENCRYPTION_KEY", file=sys.stderr)
 
-        # Normalise to exactly 32 chars for Fernet key derivation
-        if len(self.ENCRYPTION_KEY) != 32:
-            import warnings
-            self.ENCRYPTION_KEY = (self.ENCRYPTION_KEY + "0" * 32)[:32]
-            warnings.warn("ENCRYPTION_KEY was not 32 characters — padded/truncated. Fix your env var!")
+    @property
+    def cors_origins(self) -> List[str]:
+        origins = [o.strip() for o in self.FRONTEND_URL.split(",") if o.strip()]
+        if not _IS_PROD:
+            origins.extend(["http://localhost:5173", "http://localhost:3000"])
+        return list(set(origins))
 
 
 settings = Settings()
