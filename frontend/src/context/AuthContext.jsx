@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react'
-import api from '../api/client'  // ADD THIS
+import api from '../api/client'
 
 const AuthContext = createContext(null)
 
@@ -22,15 +22,19 @@ export const AuthProvider = ({ children }) => {
     localStorage.setItem('user', JSON.stringify(userData))
   }
 
-  const logout = async () => {  // CHANGED: async add kiya
+  const logout = async (navigate) => {  // CHANGED: navigate function accept karo
     try {
-      await api.post('/auth/logout')  // ADDED: API call
+      await api.post('/auth/logout')
     } catch (e) {
       console.log('Logout error:', e)
     }
     setUser(null)
     localStorage.clear()
-    window.location.href = '/login'
+    if (navigate) {
+      navigate('/login')  // USE NAVIGATE INSTEAD OF window.location
+    } else {
+      window.location.href = '/login'  // Fallback
+    }
   }
 
   const isSuperAdmin = user?.role === 'SUPER_ADMIN'
