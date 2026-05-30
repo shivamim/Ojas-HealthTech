@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useLogin } from '../api/hooks'
-import { useAuth } from '../context/AuthContext'   // ← ADDED
-import { Stethoscope, Eye, EyeOff } from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
+import { Stethoscope, Eye, EyeOff, AlertCircle, WifiOff } from 'lucide-react'
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'
 
 const Login = () => {
   const [email, setEmail] = useState('')
@@ -11,17 +13,30 @@ const Login = () => {
   const [error, setError] = useState('')
   const navigate = useNavigate()
   const loginMutation = useLogin()
-  const { login } = useAuth()                          // ← ADDED
+  const { login } = useAuth()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
     try {
       const data = await loginMutation.mutateAsync({ email, password })
-      login(data)                                       // ← ADDED: updates AuthContext instantly
+      login(data)
       navigate('/dashboard')
     } catch (err) {
-      setError(err.response?.data?.detail || 'Invalid credentials. Please try again.')
+      if (err.isNetworkError || !err.response) {
+        setError(
+          <span className="flex items-start gap-2">
+            <WifiOff size={18} className="mt-0.5 shrink-0" />
+            <span>
+              <strong>Cannot reach backend.</strong><br />
+              API URL: <code className="bg-red-100 px-1 rounded text-xs">{API_URL}</code><br />
+              <span className="text-xs">Set VITE_API_URL in Vercel and redeploy.</span>
+            </span>
+          </span>
+        )
+      } else {
+        setError(err.response?.data?.detail || 'Invalid credentials. Please try again.')
+      }
     }
   }
 
@@ -37,13 +52,14 @@ const Login = () => {
         </div>
 
         <div className="card">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {error && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-                {error}
-              </div>
-            )}
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex items-start gap-2">
+              <AlertCircle size={18} className="mt-0.5 shrink-0" />
+              <div className="flex-1">{error}</div>
+            </div>
+          )}
 
+          <form onSubmit={handleSubmit} className="space-y-4 mt-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
               <input
@@ -90,9 +106,12 @@ const Login = () => {
             </button>
           </form>
 
-          <div className="mt-6 pt-6 border-t border-gray-100">
+          <div className="mt-6 pt-6 border-t border-gray-100 space-y-2">
             <p className="text-xs text-gray-500 text-center">
               Demo: <span className="font-medium">admin@ojas.care</span> / <span className="font-medium">admin123</span>
+            </p>
+            <p className="text-[10px] text-gray-400 text-center font-mono">
+              API: {API_URL}
             </p>
           </div>
         </div>
