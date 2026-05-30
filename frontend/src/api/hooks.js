@@ -1,10 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from './client'
 
-// Helper to check if user is logged in
 const isAuthenticated = () => !!localStorage.getItem('access_token')
 
-export const useAuth = () => {
+export const useMeQuery = () => {
   return useQuery({
     queryKey: ['auth'],
     queryFn: async () => {
@@ -13,7 +12,7 @@ export const useAuth = () => {
     },
     retry: false,
     staleTime: Infinity,
-    enabled: isAuthenticated() // FIX: Only run if token exists
+    enabled: isAuthenticated()
   })
 }
 
@@ -31,7 +30,6 @@ export const useLogin = () => {
   })
 }
 
-// FIX: Add useLogout hook
 export const useLogout = () => {
   const qc = useQueryClient()
   return useMutation({
@@ -42,7 +40,7 @@ export const useLogout = () => {
       localStorage.removeItem('user')
     },
     onSuccess: () => {
-      qc.clear() // Clear all queries
+      qc.clear()
       window.location.href = '/login'
     }
   })
@@ -55,7 +53,7 @@ export const useHospitals = () => {
       const { data } = await api.get('/superadmin/hospitals')
       return data
     },
-    enabled: false // Manual fetch only
+    enabled: false
   })
 }
 
@@ -67,11 +65,16 @@ export const useCreateHospital = () => {
   })
 }
 
-export const usePatients = (status = '', page = 1) => {
+export const usePatients = (status = '', page = 1, limit = 20) => {
+  const params = new URLSearchParams()
+  if (status) params.append('status', status)
+  params.append('page', page.toString())
+  params.append('limit', limit.toString())
+  
   return useQuery({
     queryKey: ['patients', status, page],
     queryFn: async () => {
-      const { data } = await api.get(`/patients?status=${status}&page=${page}`)
+      const { data } = await api.get(`/patients?${params.toString()}`)
       return data
     }
   })
@@ -111,5 +114,15 @@ export const useResolveEscalation = () => {
   return useMutation({
     mutationFn: ({ id, note }) => api.post(`/escalations/${id}/resolve`, { resolution_note: note }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['escalations'] })
+  })
+}
+
+export const useAuditLogs = (limit = 100) => {
+  return useQuery({
+    queryKey: ['audit-logs', limit],
+    queryFn: async () => {
+      const { data } = await api.get(`/superadmin/audit-logs?limit=${limit}`)
+      return data
+    }
   })
 }
