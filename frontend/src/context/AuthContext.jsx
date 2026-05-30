@@ -22,7 +22,7 @@ export const AuthProvider = ({ children }) => {
     localStorage.setItem('user', JSON.stringify(userData))
   }
 
-  const logout = async (navigate) => {  // CHANGED: navigate function accept karo
+  const logout = async () => {
     try {
       await api.post('/auth/logout')
     } catch (e) {
@@ -30,11 +30,6 @@ export const AuthProvider = ({ children }) => {
     }
     setUser(null)
     localStorage.clear()
-    if (navigate) {
-      navigate('/login')  // USE NAVIGATE INSTEAD OF window.location
-    } else {
-      window.location.href = '/login'  // Fallback
-    }
   }
 
   const isSuperAdmin = user?.role === 'SUPER_ADMIN'
