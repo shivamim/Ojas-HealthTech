@@ -16,11 +16,10 @@ router = APIRouter(prefix="/reports", tags=["Reports"])
 
 
 @router.get("/nabh")
-@require_permission(Permission.REPORT_GENERATE)
 async def generate_nabh_report_endpoint(
     request: Request, 
     db: AsyncSession = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(require_permission(Permission.REPORT_GENERATE)),
     start_date: date = None, 
     end_date: date = None,
     hospital_id: str = None
@@ -31,6 +30,10 @@ async def generate_nabh_report_endpoint(
     if not effective_hospital_id:
         raise HTTPException(403, "Hospital ID required for report generation")
     
+    # Security: only superadmin can override hospital_id
+    if hospital_id and not current_user.is_superadmin():
+        raise HTTPException(403, "Only superadmin can specify hospital_id")
+    
     result = await db.execute(
         select(Hospital).where(Hospital.id == uuid.UUID(effective_hospital_id))
     )
@@ -38,7 +41,6 @@ async def generate_nabh_report_endpoint(
     if not hospital:
         raise HTTPException(404, "Hospital not found")
 
-    # Stats
     total_patients = await db.execute(
         select(func.count())
         .select_from(Patient)
