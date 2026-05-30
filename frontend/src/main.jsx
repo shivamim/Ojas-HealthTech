@@ -10,8 +10,9 @@ const queryClient = new QueryClient({
     queries: {
       staleTime: 30000,
       retry: 1,
-    }
-  }
+      refetchOnWindowFocus: false,
+    },
+  },
 })
 
 ReactDOM.createRoot(document.getElementById('root')).render(
