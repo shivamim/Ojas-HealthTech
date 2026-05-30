@@ -2,13 +2,14 @@ import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import inspect, text
+from sqlalchemy import inspect
 from app.core.database import engine, Base, AsyncSessionLocal
 from app.core.tenant import tenant_middleware
 from app.routers import auth, superadmin, hospitals, patients, escalations, reports, whatsapp
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Check if tables exist
     async with engine.begin() as conn:
         def check_tables(sync_conn):
             inspector = inspect(sync_conn)
@@ -16,16 +17,20 @@ async def lifespan(app: FastAPI):
         tables = await conn.run_sync(check_tables)
         
         if 'users' not in tables:
-            print("Database initialized — tables created")
+            print("Tables not found — creating...")
             await conn.run_sync(Base.metadata.create_all)
-            
-            # Seed data in new session
-            async with AsyncSessionLocal() as seed_db:
-                from seed_data import seed
-                await seed()
-                print("Seed data loaded")
+            print("Tables created")
         else:
-            print("Database initialized — tables already exist")
+            print("Tables already exist")
+    
+    # Seed data (outside engine.begin() to avoid nested async issues)
+    if 'users' not in tables:
+        print("Running seed data...")
+        async with AsyncSessionLocal() as seed_db:
+            from seed_data import seed
+            await seed()
+            print("Seed data loaded")
+    
     yield
     await engine.dispose()
 
