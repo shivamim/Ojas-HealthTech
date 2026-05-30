@@ -1,9 +1,13 @@
 import os
+import sys
 import secrets
 from pydantic_settings import BaseSettings
 from dotenv import load_dotenv
 
 load_dotenv()
+
+_IS_PROD = os.getenv("ENVIRONMENT", "development").lower() == "production"
+
 
 class Settings(BaseSettings):
     DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql+asyncpg://user:pass@localhost/ojas")
@@ -16,30 +20,34 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     WHATSAPP_API_KEY: str = os.getenv("WHATSAPP_API_KEY", "")
     WHATSAPP_API_URL: str = os.getenv("WHATSAPP_API_URL", "https://waba.360dialog.io/v1/messages")
+    ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        
-        # Auto-generate SECRET_KEY for dev (NOT production)
+
+        # ── SECRET_KEY ───────────────────────────────────────────────────
         if not self.SECRET_KEY:
+            if _IS_PROD:
+                print("FATAL: SECRET_KEY env var is required in production.", file=sys.stderr)
+                sys.exit(1)
             import warnings
             self.SECRET_KEY = secrets.token_urlsafe(32)
-            warnings.warn("SECRET_KEY auto-generated. Set a fixed key in production!")
-        
-        if len(self.SECRET_KEY) < 32:
-            import warnings
-            warnings.warn("SECRET_KEY is too short. Use a strong 32+ character key in production.")
-        
-        # ENCRYPTION_KEY must be exactly 32 chars
+            warnings.warn("SECRET_KEY auto-generated — resets every restart! Set it in env vars.")
+
+        # ── ENCRYPTION_KEY ───────────────────────────────────────────────
         if not self.ENCRYPTION_KEY:
+            if _IS_PROD:
+                print("FATAL: ENCRYPTION_KEY env var is required in production.", file=sys.stderr)
+                sys.exit(1)
             import warnings
-            self.ENCRYPTION_KEY = secrets.token_hex(16)  # 32 hex chars
-            warnings.warn("ENCRYPTION_KEY auto-generated. Set a fixed 32-char key in production!")
-        
+            self.ENCRYPTION_KEY = secrets.token_hex(16)  # exactly 32 hex chars
+            warnings.warn("ENCRYPTION_KEY auto-generated — encrypted data unreadable after restart!")
+
+        # Normalise to exactly 32 chars for Fernet key derivation
         if len(self.ENCRYPTION_KEY) != 32:
             import warnings
-            # Pad or truncate to 32 chars
             self.ENCRYPTION_KEY = (self.ENCRYPTION_KEY + "0" * 32)[:32]
-            warnings.warn("ENCRYPTION_KEY must be exactly 32 characters. Adjusted for dev.")
+            warnings.warn("ENCRYPTION_KEY was not 32 characters — padded/truncated. Fix your env var!")
+
 
 settings = Settings()
