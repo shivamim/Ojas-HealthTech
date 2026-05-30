@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import inspect, text
-from app.core.database import engine, Base
+from app.core.database import engine, Base, AsyncSessionLocal
 from app.core.tenant import tenant_middleware
 from app.routers import auth, superadmin, hospitals, patients, escalations, reports, whatsapp
 
@@ -14,13 +14,16 @@ async def lifespan(app: FastAPI):
             inspector = inspect(sync_conn)
             return inspector.get_table_names()
         tables = await conn.run_sync(check_tables)
+        
         if 'users' not in tables:
-            await conn.run_sync(Base.metadata.create_all)
             print("Database initialized — tables created")
-            # Auto-seed on first run
-            from seed_data import seed
-            await seed()
-            print("Seed data loaded")
+            await conn.run_sync(Base.metadata.create_all)
+            
+            # Seed data in new session
+            async with AsyncSessionLocal() as seed_db:
+                from seed_data import seed
+                await seed()
+                print("Seed data loaded")
         else:
             print("Database initialized — tables already exist")
     yield
@@ -35,7 +38,7 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS — restrict in production via env
+# CORS
 origins_raw = os.getenv("FRONTEND_URL", "http://localhost:5173")
 origins = [o.strip() for o in origins_raw.split(",") if o.strip()]
 
