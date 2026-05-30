@@ -3,10 +3,11 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
-from datetime import datetime, timezone
+from datetime import datetime
 
 from app.core.database import get_db
 from app.core.tenant import require_tenant
+from app.core.encryption import decrypt_field
 from app.core.rbac import Permission, require_permission
 from app.models.escalation import Escalation
 from app.models.patient import Patient
@@ -29,7 +30,7 @@ async def list_escalations(request: Request, db: AsyncSession = Depends(get_db),
     query = select(Escalation).join(Patient)
     if hospital_id:
         query = query.where(Patient.hospital_id == uuid.UUID(hospital_id))
-    
+
     if status:
         query = query.where(Escalation.status == status)
 
@@ -43,14 +44,14 @@ async def list_escalations(request: Request, db: AsyncSession = Depends(get_db),
         data.append({
             "id": str(e.id),
             "patient_id": str(e.patient_id),
-            "patient_name": p.full_name if p else "Unknown",
+            "patient_name": decrypt_field(p.full_name) if p else "Unknown",
             "level": e.level,
             "status": e.status,
             "trigger_type": e.trigger_type,
             "trigger_detail": e.trigger_detail,
             "description": e.description,
             "created_at": e.created_at.isoformat() if e.created_at else None,
-            "suggestions": get_suggestions(e.trigger_type, p.doctor_name if p else "Doctor")
+            "suggestions": get_suggestions(e.trigger_type, decrypt_field(p.doctor_name) if p else "Doctor")
         })
     return data
 
@@ -70,7 +71,7 @@ async def resolve_escalation(escalation_id: str, req: ResolveRequest, request: R
     if hospital_id:
         patient_result = await db.execute(
             select(Patient).where(
-                Patient.id == e.patient_id, 
+                Patient.id == e.patient_id,
                 Patient.hospital_id == uuid.UUID(hospital_id)
             )
         )
@@ -88,13 +89,13 @@ async def resolve_escalation(escalation_id: str, req: ResolveRequest, request: R
 
     e.status = "RESOLVED"
     e.resolution_note = req.resolution_note
-    e.resolved_at = datetime.now(timezone.utc)  # FIX: timezone-aware
+    e.resolved_at = datetime.utcnow()
     e.resolved_by = uuid.UUID(request.state.user_id) if request.state.user_id else None
 
     # FIX: Proper async count check
     open_count_result = await db.execute(
         select(Escalation).where(
-            Escalation.patient_id == e.patient_id, 
+            Escalation.patient_id == e.patient_id,
             Escalation.status == "OPEN"
         )
     )
@@ -107,7 +108,7 @@ async def resolve_escalation(escalation_id: str, req: ResolveRequest, request: R
         event_type="HUMAN_ACTION",
         title="Escalation Resolved",
         description=req.resolution_note,
-        day_number=p.current_day if p else 0  # FIX: Safe access
+        day_number=p.current_day if p else 0
     )
     db.add(event)
 
