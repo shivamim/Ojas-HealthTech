@@ -4,7 +4,13 @@ from sqlalchemy.orm import declarative_base
 from sqlalchemy.pool import NullPool
 from app.core.config import settings
 
-use_null_pool = os.getenv("RENDER") or os.getenv("VERCEL")
+_IS_PROD = os.getenv("ENVIRONMENT", "development").lower() == "production"
+use_null_pool = os.getenv("DATABASE_USE_NULLPOOL", "false").lower() == "true"
+
+# Supabase requires SSL in production
+connect_args = {}
+if _IS_PROD and "supabase" in settings.DATABASE_URL.lower():
+    connect_args["ssl"] = "require"
 
 if use_null_pool:
     engine = create_async_engine(
@@ -13,6 +19,7 @@ if use_null_pool:
         future=True,
         poolclass=NullPool,
         pool_pre_ping=True,
+        connect_args=connect_args,
     )
 else:
     engine = create_async_engine(
@@ -21,8 +28,9 @@ else:
         future=True,
         pool_pre_ping=True,
         pool_recycle=300,
-        pool_size=5,
-        max_overflow=0,
+        pool_size=settings.DATABASE_POOL_SIZE,
+        max_overflow=settings.DATABASE_MAX_OVERFLOW,
+        connect_args=connect_args,
     )
 
 AsyncSessionLocal = async_sessionmaker(
@@ -33,6 +41,7 @@ AsyncSessionLocal = async_sessionmaker(
 )
 
 Base = declarative_base()
+
 
 async def get_db():
     async with AsyncSessionLocal() as session:
