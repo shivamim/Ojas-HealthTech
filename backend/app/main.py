@@ -20,7 +20,7 @@ app.add_middleware(
     allow_origins=origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allow_headers=["*"],
+    allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
 )
 
 # Tenant middleware
@@ -50,6 +50,3 @@ async def root():
 @app.get("/health")
 async def health():
     return {"status": "healthy"}
-
-# Vercel handler
-handler = app
