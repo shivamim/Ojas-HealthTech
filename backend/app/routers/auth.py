@@ -1,12 +1,15 @@
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from pydantic import BaseModel, EmailStr
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 
 from app.core.database import get_db
-from app.core.security import verify_password, get_password_hash, create_access_token, create_refresh_token, decode_token
+from app.core.security import (
+    verify_password, get_password_hash, create_access_token, 
+    create_refresh_token, decode_token, decode_token_safe
+)
 from app.core.config import settings
 from app.models.user import User
 from app.models.hospital_invite import HospitalInvite
@@ -14,9 +17,11 @@ from app.models.refresh_token import RefreshToken
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
+
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -24,10 +29,16 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     user: dict
 
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
 class InviteAcceptRequest(BaseModel):
     token: str
     full_name: str
     password: str
+
 
 @router.post("/login", response_model=TokenResponse)
 async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
@@ -52,7 +63,7 @@ async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
     rt = RefreshToken(
         user_id=user.id,
         token_hash=get_password_hash(refresh),
-        expires_at=datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+        expires_at=datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
     )
     db.add(rt)
     await db.commit()
@@ -69,13 +80,28 @@ async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
         }
     }
 
+
+# FIX: Accept refresh_token in body (JSON) instead of query param
 @router.post("/refresh")
-async def refresh_token(refresh_token: str, db: AsyncSession = Depends(get_db)):
-    payload = decode_token(refresh_token)
+async def refresh_token(req: RefreshRequest, db: AsyncSession = Depends(get_db)):
+    payload = decode_token(req.refresh_token)
     if not payload or payload.get("type") != "refresh":
         raise HTTPException(401, "Invalid refresh token")
 
     user_id = payload.get("user_id")
+    
+    # FIX: Validate refresh token exists in database (not revoked)
+    token_result = await db.execute(
+        select(RefreshToken).where(
+            RefreshToken.user_id == uuid.UUID(user_id),
+            RefreshToken.revoked_at == None,
+            RefreshToken.expires_at > datetime.now(timezone.utc)
+        )
+    )
+    stored_token = token_result.scalar_one_or_none()
+    if not stored_token:
+        raise HTTPException(401, "Refresh token revoked or expired")
+
     result = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
     user = result.scalar_one_or_none()
     if not user:
@@ -89,20 +115,25 @@ async def refresh_token(refresh_token: str, db: AsyncSession = Depends(get_db)):
     }
     return {"access_token": create_access_token(new_payload)}
 
-@router.post("/logout")  # ADDED
+
+# FIX: Actually delete refresh tokens on logout
+@router.post("/logout")
 async def logout(request: Request, db: AsyncSession = Depends(get_db)):
     auth = request.headers.get("authorization", "")
     if auth.startswith("Bearer "):
         token = auth.replace("Bearer ", "")
-        payload = decode_token(token)
+        payload = decode_token_safe(token)
         if payload:
             user_id = payload.get("user_id")
-            # Delete refresh tokens for this user
-            await db.execute(
-                select(RefreshToken).where(RefreshToken.user_id == uuid.UUID(user_id))
-            )
-            # Note: In production, you might want to mark as revoked instead of deleting
+            if user_id:
+                # FIX: Use delete() instead of select()
+                await db.execute(
+                    delete(RefreshToken).where(RefreshToken.user_id == uuid.UUID(user_id))
+                )
+                await db.commit()
+    
     return {"message": "Logged out successfully"}
+
 
 @router.post("/verify-invite")
 async def verify_invite(token: str, db: AsyncSession = Depends(get_db)):
@@ -110,9 +141,10 @@ async def verify_invite(token: str, db: AsyncSession = Depends(get_db)):
     invite = result.scalar_one_or_none()
     if not invite or invite.used_at:
         raise HTTPException(400, "Invalid or used invite")
-    if invite.expires_at < datetime.utcnow():
+    if invite.expires_at < datetime.now(timezone.utc):
         raise HTTPException(400, "Invite expired")
     return {"valid": True, "email": invite.email, "role": invite.role}
+
 
 @router.post("/accept-invite")
 async def accept_invite(req: InviteAcceptRequest, db: AsyncSession = Depends(get_db)):
@@ -129,7 +161,7 @@ async def accept_invite(req: InviteAcceptRequest, db: AsyncSession = Depends(get
         hospital_id=invite.hospital_id
     )
     db.add(user)
-    invite.used_at = datetime.utcnow()
+    invite.used_at = datetime.now(timezone.utc)
     await db.commit()
 
     payload = {
@@ -143,6 +175,7 @@ async def accept_invite(req: InviteAcceptRequest, db: AsyncSession = Depends(get
         "refresh_token": create_refresh_token({"user_id": str(user.id)}),
         "user": {"id": str(user.id), "email": user.email, "full_name": user.full_name, "role": user.role}
     }
+
 
 @router.get("/me")
 async def get_me(request: Request):
