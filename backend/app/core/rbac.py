@@ -1,6 +1,7 @@
 from enum import Enum
 from functools import wraps
-from fastapi import HTTPException, Request
+from fastapi import HTTPException, Request, Depends
+from app.core.security import decode_token
 
 class Permission(Enum):
     PATIENT_CREATE = "patient:create"
@@ -24,24 +25,42 @@ PERMISSION_MAP = {
     "DOCTOR": [Permission.PATIENT_READ, Permission.REPORT_GENERATE]
 }
 
+def get_current_user(request: Request):
+    """Extract user from token and set request.state"""
+    auth = request.headers.get("authorization", "")
+    if not auth.startswith("Bearer "):
+        raise HTTPException(401, "Missing token")
+    
+    token = auth.replace("Bearer ", "")
+    payload = decode_token(token)
+    if not payload:
+        raise HTTPException(401, "Invalid token")
+    
+    request.state.user_id = payload.get("user_id")
+    request.state.role = payload.get("role")
+    request.state.hospital_id = payload.get("hospital_id")
+    
+    return payload
+
 def require_permission(permission: Permission):
     def decorator(func):
         @wraps(func)
         async def wrapper(*args, **kwargs):
-            # Extract request from kwargs or args
             request = kwargs.get("request")
             if not request:
                 for arg in args:
                     if isinstance(arg, Request):
                         request = arg
                         break
-                    # Check if it's a Pydantic model that might have request
-                    if hasattr(arg, "request"):
-                        request = arg.request
-                        break
-
+            
             if not request:
                 raise HTTPException(403, "Request object not found")
+
+            # Use get_current_user to set request.state
+            try:
+                get_current_user(request)
+            except HTTPException:
+                raise HTTPException(403, "Authentication required")
 
             role = getattr(request.state, "role", None)
             if not role:
@@ -50,7 +69,7 @@ def require_permission(permission: Permission):
             perms = PERMISSION_MAP.get(role, [])
             if permission not in perms:
                 raise HTTPException(403, "Insufficient permissions")
-            
+
             return await func(*args, **kwargs)
         return wrapper
     return decorator
