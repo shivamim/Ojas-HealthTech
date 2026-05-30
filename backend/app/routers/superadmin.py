@@ -1,10 +1,11 @@
 import uuid
 import secrets
+import os
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, text
 from pydantic import BaseModel, EmailStr
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
 
 from app.core.database import get_db
 from app.core.rbac import Permission, require_permission
@@ -17,6 +18,7 @@ from app.models.audit_log import AuditLog
 
 router = APIRouter(prefix="/superadmin", tags=["SuperAdmin"])
 
+
 class HospitalCreate(BaseModel):
     name: str
     city: str
@@ -26,9 +28,11 @@ class HospitalCreate(BaseModel):
     contact_email: EmailStr
     contact_phone: str
 
+
 class InviteCreate(BaseModel):
     email: EmailStr
     role: str = "HOSPITAL_ADMIN"
+
 
 @router.post("/hospitals")
 @require_permission(Permission.HOSPITAL_MANAGE)
@@ -49,6 +53,7 @@ async def create_hospital(req: HospitalCreate, request: Request, db: AsyncSessio
     await db.commit()
     await db.refresh(hospital)
     return {"id": str(hospital.id), "name": hospital.name, "message": "Hospital created"}
+
 
 @router.get("/hospitals")
 @require_permission(Permission.HOSPITAL_MANAGE)
@@ -74,6 +79,7 @@ async def list_hospitals(request: Request, db: AsyncSession = Depends(get_db)):
             "created_at": h.created_at.isoformat() if h.created_at else None
         })
     return data
+
 
 @router.get("/hospitals/{hospital_id}")
 @require_permission(Permission.HOSPITAL_MANAGE)
@@ -101,6 +107,7 @@ async def get_hospital(hospital_id: str, request: Request, db: AsyncSession = De
         "settings": h.settings
     }
 
+
 @router.post("/hospitals/{hospital_id}/invite")
 @require_permission(Permission.HOSPITAL_MANAGE)
 async def invite_user(hospital_id: str, req: InviteCreate, request: Request, db: AsyncSession = Depends(get_db)):
@@ -113,7 +120,7 @@ async def invite_user(hospital_id: str, req: InviteCreate, request: Request, db:
         email=req.email,
         role=req.role,
         token=token,
-        expires_at=datetime.now(timezone.utc) + timedelta(hours=48),
+        expires_at=datetime.utcnow() + timedelta(hours=48),
         created_by=uuid.UUID(request.state.user_id) if request.state.user_id else None
     )
     db.add(invite)
@@ -125,7 +132,7 @@ async def invite_user(hospital_id: str, req: InviteCreate, request: Request, db:
         "link": f"https://ojas.care/accept-invite?token={token}"
     }
 
-# FIX: Permission.SUPERADMIN → Permission.HOSPITAL_MANAGE (Super Admin already has all permissions)
+
 @router.get("/audit-logs")
 @require_permission(Permission.HOSPITAL_MANAGE)
 async def get_audit_logs(request: Request, db: AsyncSession = Depends(get_db), limit: int = 100):
@@ -144,3 +151,39 @@ async def get_audit_logs(request: Request, db: AsyncSession = Depends(get_db), l
         "timestamp": l.timestamp.isoformat() if l.timestamp else None,
         "success": l.success
     } for l in logs]
+
+
+@router.post("/reset-database")
+@require_permission(Permission.HOSPITAL_MANAGE)
+async def reset_database(request: Request, db: AsyncSession = Depends(get_db)):
+    if request.state.role != "SUPER_ADMIN":
+        raise HTTPException(403, "Superadmin only")
+    
+    # Only allow with special header
+    if request.headers.get("X-Reset-Key") != "ojas-reset-2026":
+        raise HTTPException(403, "Reset key required")
+    
+    # Drop all tables
+    tables = [
+        "refresh_tokens", "audit_logs", "timeline_events", 
+        "escalations", "checkins", "patients", 
+        "users", "hospital_invites", "hospitals"
+    ]
+    
+    for table in tables:
+        try:
+            await db.execute(text(f"DROP TABLE IF EXISTS {table} CASCADE"))
+        except:
+            pass
+    
+    await db.commit()
+    
+    # Recreate tables
+    async with db.begin():
+        await db.run_sync(Base.metadata.create_all)
+    
+    # Run seed
+    from seed_data import seed
+    await seed()
+    
+    return {"message": "Database reset and seeded successfully"}
