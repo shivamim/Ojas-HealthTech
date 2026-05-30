@@ -2,6 +2,8 @@ import axios from 'axios'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'
 
+console.log('[Ojas API] Connecting to:', API_URL)
+
 const api = axios.create({
   baseURL: API_URL,
   timeout: 15000,
@@ -12,7 +14,6 @@ const api = axios.create({
   withCredentials: false,
 })
 
-// Request interceptor — attach Bearer token
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('access_token')
@@ -22,7 +23,6 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 )
 
-// Response interceptor — transparent token refresh on 401
 let _refreshing = false
 let _queue = []
 
@@ -36,11 +36,15 @@ const processQueue = (error, token = null) => {
 api.interceptors.response.use(
   (res) => res,
   async (err) => {
+    if (!err.response) {
+      err.isNetworkError = true
+      return Promise.reject(err)
+    }
+
     const original = err.config
 
     if (err.response?.status === 401 && !original._retry) {
       original._retry = true
-
       const refresh = localStorage.getItem('refresh_token')
       if (!refresh) {
         _clearAuthAndRedirect()
