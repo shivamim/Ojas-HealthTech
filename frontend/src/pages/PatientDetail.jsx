@@ -1,159 +1,166 @@
 import { useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
-import { usePatient } from '../api/hooks'
+import { Link } from 'react-router-dom'
+import { usePatients } from '../api/hooks'
 import RiskBadge from '../components/RiskBadge'
-import EscalationCoach from '../components/EscalationCoach'
-import { ArrowLeft, Calendar, Phone, Bed, User, Activity, MessageSquare } from 'lucide-react'
+import { Search, UserPlus, ChevronLeft, ChevronRight, Filter } from 'lucide-react'
 
-const PatientDetail = () => {
-  const { id } = useParams()
-  const { data: patient, isLoading } = usePatient(id)
-  const [activeTab, setActiveTab] = useState('timeline')
+const PatientList = () => {
+  const [status, setStatus] = useState('')
+  const [page, setPage] = useState(1)
+  const [search, setSearch] = useState('')
+  
+  const { data, isLoading } = usePatients(status, page)
 
-  if (isLoading) return <div className="p-6 text-center text-gray-400">Loading...</div>
-  if (!patient) return <div className="p-6 text-center text-gray-400">Patient not found</div>
+  const patients = data?.data || []
+  const total = data?.total || 0
+  const limit = data?.limit || 20
+  const totalPages = Math.ceil(total / limit)
+
+  const filteredPatients = patients.filter(p => 
+    p.full_name?.toLowerCase().includes(search.toLowerCase()) ||
+    p.surgery_type?.toLowerCase().includes(search.toLowerCase()) ||
+    p.doctor_name?.toLowerCase().includes(search.toLowerCase())
+  )
 
   const tabs = [
-    { id: 'timeline', label: 'Timeline' },
-    { id: 'checkins', label: 'Check-ins' },
-    { id: 'escalations', label: 'Escalations' }
+    { label: 'All', value: '' },
+    { label: 'Active', value: 'ACTIVE' },
+    { label: 'Escalated', value: 'ESCALATED' },
   ]
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
-      <Link to="/patients" className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-ojas-600 mb-4">
-        <ArrowLeft size={16} /> Back to Patients
-      </Link>
-
-      <div className="card mb-6">
-        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-3 mb-2">
-              <h1 className="text-2xl font-bold text-gray-900">{patient.full_name}</h1>
-              <RiskBadge score={patient.risk_score} level={patient.risk_level} />
-            </div>
-            <div className="flex flex-wrap gap-4 text-sm text-gray-500">
-              <span className="flex items-center gap-1"><User size={14} /> Age {patient.age}</span>
-              <span className="flex items-center gap-1"><Calendar size={14} /> {patient.surgery_type}</span>
-              <span className="flex items-center gap-1"><Bed size={14} /> {patient.bed_number}</span>
-              <span className="flex items-center gap-1"><Phone size={14} /> {patient.mobile}</span>
-            </div>
-          </div>
-          <div className="text-right">
-            <p className="text-sm text-gray-500">UHID</p>
-            <p className="font-mono text-sm text-gray-700">{patient.uhid}</p>
-            <p className="text-sm text-gray-500 mt-2">Doctor</p>
-            <p className="font-medium text-gray-900">{patient.doctor_name}</p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6 pt-6 border-t border-gray-100">
-          <div className="text-center">
-            <p className="text-2xl font-bold text-gray-900">{patient.current_day}</p>
-            <p className="text-xs text-gray-500">Current Day</p>
-          </div>
-          <div className="text-center">
-            <p className="text-2xl font-bold text-gray-900">{patient.response_rate?.toFixed(0)}%</p>
-            <p className="text-xs text-gray-500">Response Rate</p>
-          </div>
-          <div className="text-center">
-            <p className="text-2xl font-bold text-gray-900">{patient.readmission_risk}</p>
-            <p className="text-xs text-gray-500">Readmission Risk</p>
-          </div>
-          <div className="text-center">
-            <p className="text-2xl font-bold text-gray-900">{patient.status}</p>
-            <p className="text-xs text-gray-500">Status</p>
-          </div>
-        </div>
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <h1 className="text-2xl font-bold text-gray-900">Patients</h1>
+        <Link to="/patients/new" className="btn-primary flex items-center gap-2 self-start">
+          <UserPlus size={18} />
+          Enroll Patient
+        </Link>
       </div>
 
-      {patient.risk_level === 'CRITICAL' && (
-        <EscalationCoach suggestions={[
-          "URGENT: Call patient immediately. Verify consciousness and breathing.",
-          "Notify Dr. " + patient.doctor_name + " for emergency review.",
-          "If patient non-responsive, dispatch ambulance to registered address."
-        ]} />
-      )}
-
-      <div className="card">
-        <div className="flex gap-1 mb-4 border-b border-gray-100">
-          {tabs.map(t => (
+      {/* Filters */}
+      <div className="flex flex-col sm:flex-row gap-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+          <input
+            type="text"
+            placeholder="Search patients, surgery, doctor..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="input pl-10"
+          />
+        </div>
+        <div className="flex gap-2">
+          {tabs.map((tab) => (
             <button
-              key={t.id}
-              onClick={() => setActiveTab(t.id)}
-              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === t.id
-                  ? 'border-ojas-600 text-ojas-700'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              key={tab.value}
+              onClick={() => { setStatus(tab.value); setPage(1) }}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                status === tab.value
+                  ? 'bg-ojas-600 text-white'
+                  : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
               }`}
             >
-              {t.label}
+              {tab.label}
             </button>
           ))}
         </div>
+      </div>
 
-        {activeTab === 'timeline' && (
-          <div className="space-y-3">
-            {patient.timeline?.map((t, i) => (
-              <div key={i} className="flex gap-3">
-                <div className="flex flex-col items-center">
-                  <div className={`w-3 h-3 rounded-full ${
-                    t.type === 'ESCALATION' ? 'bg-red-500' :
-                    t.type === 'CHECKIN' ? 'bg-green-500' :
-                    'bg-ojas-500'
-                  }`} />
-                  {i < patient.timeline.length - 1 && <div className="w-0.5 h-full bg-gray-200 mt-1" />}
+      {/* Table */}
+      <div className="card overflow-hidden">
+        {isLoading ? (
+          <div className="p-12 text-center">
+            <div className="w-8 h-8 border-2 border-ojas-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+            <p className="text-gray-500">Loading patients...</p>
+          </div>
+        ) : filteredPatients.length === 0 ? (
+          <div className="p-12 text-center text-gray-400">
+            <Filter className="w-12 h-12 mx-auto mb-2 opacity-50" />
+            <p>No patients found</p>
+          </div>
+        ) : (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Patient</th>
+                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Surgery</th>
+                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Doctor</th>
+                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Progress</th>
+                    <th className="text-left py-3 px-4 font-semibold text-gray-700">Risk</th>
+                    <th className="text-right py-3 px-4 font-semibold text-gray-700">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredPatients.map((p) => (
+                    <tr key={p.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                      <td className="py-4 px-4">
+                        <div>
+                          <p className="font-medium text-gray-900">{p.full_name}</p>
+                          <p className="text-xs text-gray-500">Age {p.age} • {p.uhid}</p>
+                        </div>
+                      </td>
+                      <td className="py-4 px-4 text-gray-600">{p.surgery_type}</td>
+                      <td className="py-4 px-4 text-gray-600">{p.doctor_name}</td>
+                      <td className="py-4 px-4">
+                        <div className="flex items-center gap-2">
+                          <div className="w-24 h-2 bg-gray-200 rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-ojas-500 rounded-full"
+                              style={{ width: `${(p.current_day / 14) * 100}%` }}
+                            />
+                          </div>
+                          <span className="text-xs text-gray-500">{p.current_day}/14</span>
+                        </div>
+                      </td>
+                      <td className="py-4 px-4">
+                        <RiskBadge level={p.risk_level} score={p.risk_score} size="sm" />
+                      </td>
+                      <td className="py-4 px-4 text-right">
+                        <Link 
+                          to={`/patients/${p.id}`}
+                          className="text-ojas-600 hover:text-ojas-700 font-medium text-sm"
+                        >
+                          Details →
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between px-4 py-4 border-t border-gray-100">
+                <p className="text-sm text-gray-500">
+                  Showing {(page - 1) * limit + 1} to {Math.min(page * limit, total)} of {total}
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                    disabled={page === 1}
+                    className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-40"
+                  >
+                    <ChevronLeft size={18} />
+                  </button>
+                  <button
+                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                    disabled={page === totalPages}
+                    className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-40"
+                  >
+                    <ChevronRight size={18} />
+                  </button>
                 </div>
-                <div className="pb-4">
-                  <p className="font-medium text-sm text-gray-900">{t.title}</p>
-                  <p className="text-sm text-gray-500">{t.description}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">Day {t.day}</p>
-                </div>
               </div>
-            ))}
-          </div>
-        )}
-
-        {activeTab === 'checkins' && (
-          <div className="grid grid-cols-7 gap-2">
-            {patient.checkins?.map(c => (
-              <div
-                key={c.day}
-                className={`p-3 rounded-lg text-center ${
-                  c.status === 'COMPLETED' ? 'bg-green-50 border border-green-200' :
-                  c.status === 'ESCALATED' ? 'bg-red-50 border border-red-200' :
-                  c.status === 'MISSED' ? 'bg-orange-50 border border-orange-200' :
-                  'bg-gray-50 border border-gray-200'
-                }`}
-              >
-                <p className="text-xs text-gray-500">Day {c.day}</p>
-                <p className={`text-xs font-medium mt-1 ${
-                  c.status === 'COMPLETED' ? 'text-green-700' :
-                  c.status === 'ESCALATED' ? 'text-red-700' :
-                  c.status === 'MISSED' ? 'text-orange-700' :
-                  'text-gray-500'
-                }`}>{c.status}</p>
-                {c.risk_level !== 'LOW' && (
-                  <p className="text-xs mt-1"><RiskBadge level={c.risk_level} size="sm" /></p>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {activeTab === 'escalations' && (
-          <div className="space-y-3">
-            {patient.timeline?.filter(t => t.type === 'ESCALATION').map((t, i) => (
-              <div key={i} className="p-4 bg-red-50 rounded-lg border border-red-100">
-                <p className="font-medium text-red-800">{t.title}</p>
-                <p className="text-sm text-red-600 mt-1">{t.description}</p>
-              </div>
-            )) || <p className="text-gray-400 text-center py-8">No escalations for this patient</p>}
-          </div>
+            )}
+          </>
         )}
       </div>
     </div>
   )
 }
 
-export default PatientDetail
+export default PatientList
