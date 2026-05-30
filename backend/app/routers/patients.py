@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from pydantic import BaseModel
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from typing import Optional
 
 from app.core.database import get_db
@@ -22,6 +22,7 @@ from app.services.whatsapp import send_whatsapp_message
 
 router = APIRouter(prefix="/patients", tags=["Patients"])
 
+
 class PatientCreate(BaseModel):
     full_name: str
     mobile: str
@@ -35,10 +36,12 @@ class PatientCreate(BaseModel):
     uhid: str
     instructions: str = "Keep wound dry. Take prescribed medicines. Walk daily."
 
+
 class PatientUpdate(BaseModel):
     status: Optional[str] = None
     current_day: Optional[int] = None
     instructions: Optional[str] = None
+
 
 @router.post("")
 @require_permission(Permission.PATIENT_CREATE)
@@ -92,6 +95,7 @@ async def create_patient(req: PatientCreate, request: Request, db: AsyncSession 
 
     return {"id": str(patient.id), "message": "Patient enrolled", "checkins_created": 14}
 
+
 @router.get("")
 @require_permission(Permission.PATIENT_READ)
 async def list_patients(request: Request, db: AsyncSession = Depends(get_db), status: str = None, page: int = 1, limit: int = 20):
@@ -131,6 +135,7 @@ async def list_patients(request: Request, db: AsyncSession = Depends(get_db), st
         })
 
     return {"data": data, "total": total, "page": page, "limit": limit}
+
 
 @router.get("/{patient_id}")
 @require_permission(Permission.PATIENT_READ)
@@ -176,7 +181,10 @@ async def get_patient(patient_id: str, request: Request, db: AsyncSession = Depe
         "timeline": [{"day": t.day_number, "type": t.event_type, "title": t.title, "description": t.description} for t in timeline]
     }
 
+
+# FIX: Added @require_permission decorator
 @router.post("/{patient_id}/checkin/{day}")
+@require_permission(Permission.PATIENT_UPDATE)
 async def submit_checkin(patient_id: str, day: int, request: Request, db: AsyncSession = Depends(get_db), responses: dict = None):
     hospital_id = require_tenant(request)
 
@@ -196,7 +204,7 @@ async def submit_checkin(patient_id: str, day: int, request: Request, db: AsyncS
         raise HTTPException(404, "Checkin not found")
 
     checkin.status = "COMPLETED"
-    checkin.replied_at = datetime.utcnow()
+    checkin.replied_at = datetime.now(timezone.utc)  # FIX: timezone-aware
     checkin.responses = responses or {}
     checkin.pain_level = int(responses.get("pain", 0)) if responses else None
 
@@ -224,56 +232,4 @@ async def submit_checkin(patient_id: str, day: int, request: Request, db: AsyncS
         patient_id=p.id,
         event_type="CHECKIN",
         title=f"Day {day} Check-in Completed",
-        description=f"Pain: {responses.get('pain', 'N/A')}. Risk: {ai_result['level']}",
-        day_number=day
-    )
-    db.add(event)
-
-    # Auto-escalation if CRITICAL
-    if ai_result["level"] in ["CRITICAL", "HIGH"]:
-        p.status = "ESCALATED"
-        checkin.status = "ESCALATED"
-
-        esc = Escalation(
-            patient_id=p.id,
-            level="CRITICAL" if ai_result["level"] == "CRITICAL" else "WARNING",
-            status="OPEN",
-            trigger_type="ai_risk_score",
-            trigger_detail=", ".join(ai_result["reasons"]),
-            description=f"Day {day} check-in triggered escalation. Score: {ai_result['score']}"
-        )
-        db.add(esc)
-
-        event2 = TimelineEvent(
-            patient_id=p.id,
-            event_type="ESCALATION",
-            title=f"Day {day} Escalation: {ai_result['level']}",
-            description=", ".join(ai_result["reasons"]),
-            day_number=day
-        )
-        db.add(event2)
-
-    await db.commit()
-    return {"message": "Check-in recorded", "risk": ai_result}
-
-@router.put("/{patient_id}")
-@require_permission(Permission.PATIENT_UPDATE)
-async def update_patient(patient_id: str, req: PatientUpdate, request: Request, db: AsyncSession = Depends(get_db)):
-    hospital_id = require_tenant(request)
-
-    # FIX: Super Admin can update any patient
-    query = select(Patient).where(Patient.id == uuid.UUID(patient_id))
-    if hospital_id:
-        query = query.where(Patient.hospital_id == uuid.UUID(hospital_id))
-    
-    result = await db.execute(query)
-    p = result.scalar_one_or_none()
-    if not p:
-        raise HTTPException(404, "Patient not found")
-
-    if req.status: p.status = req.status
-    if req.current_day: p.current_day = req.current_day
-    if req.instructions: p.instructions = req.instructions
-
-    await db.commit()
-    return {"message": "Patient updated"}
+        description=f"Pain: {responses.get('pain', 'N/A
