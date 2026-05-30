@@ -1,5 +1,5 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Body
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from pydantic import BaseModel
@@ -101,11 +101,10 @@ async def create_patient(req: PatientCreate, request: Request, db: AsyncSession 
 async def list_patients(request: Request, db: AsyncSession = Depends(get_db), status: str = None, page: int = 1, limit: int = 20):
     hospital_id = require_tenant(request)
 
-    # FIX: Super Admin sees all patients, others see only their hospital
     query = select(Patient)
     if hospital_id:
         query = query.where(Patient.hospital_id == uuid.UUID(hospital_id))
-    
+
     if status:
         query = query.where(Patient.status == status)
 
@@ -142,11 +141,10 @@ async def list_patients(request: Request, db: AsyncSession = Depends(get_db), st
 async def get_patient(patient_id: str, request: Request, db: AsyncSession = Depends(get_db)):
     hospital_id = require_tenant(request)
 
-    # FIX: Super Admin can access any patient
     query = select(Patient).where(Patient.id == uuid.UUID(patient_id))
     if hospital_id:
         query = query.where(Patient.hospital_id == uuid.UUID(hospital_id))
-    
+
     result = await db.execute(query)
     p = result.scalar_one_or_none()
     if not p:
@@ -182,17 +180,15 @@ async def get_patient(patient_id: str, request: Request, db: AsyncSession = Depe
     }
 
 
-# FIX: Added @require_permission decorator
 @router.post("/{patient_id}/checkin/{day}")
 @require_permission(Permission.PATIENT_UPDATE)
-async def submit_checkin(patient_id: str, day: int, request: Request, db: AsyncSession = Depends(get_db), responses: dict = None):
+async def submit_checkin(patient_id: str, day: int, request: Request, db: AsyncSession = Depends(get_db), responses: dict = Body(default={})):
     hospital_id = require_tenant(request)
 
-    # FIX: Super Admin can access any patient for checkin
     query = select(Patient).where(Patient.id == uuid.UUID(patient_id))
     if hospital_id:
         query = query.where(Patient.hospital_id == uuid.UUID(hospital_id))
-    
+
     result = await db.execute(query)
     p = result.scalar_one_or_none()
     if not p:
@@ -204,7 +200,7 @@ async def submit_checkin(patient_id: str, day: int, request: Request, db: AsyncS
         raise HTTPException(404, "Checkin not found")
 
     checkin.status = "COMPLETED"
-    checkin.replied_at = datetime.now(timezone.utc)  # FIX: timezone-aware
+    checkin.replied_at = datetime.now(timezone.utc)
     checkin.responses = responses or {}
     checkin.pain_level = int(responses.get("pain", 0)) if responses else None
 
@@ -221,15 +217,50 @@ async def submit_checkin(patient_id: str, day: int, request: Request, db: AsyncS
     # Update readmission risk
     p.readmission_risk = predict_readmission_risk(p)
 
-    # Calculate response rate
-    total = len(p.checkins)
-    completed = sum(1 for c in p.checkins if c.status == "COMPLETED")
+    # Calculate response rate - FIX: explicit async query instead of lazy load
+    checkin_all_result = await db.execute(select(CheckIn).where(CheckIn.patient_id == p.id))
+    all_checkins = checkin_all_result.scalars().all()
+    total = len(all_checkins)
+    completed = sum(1 for c in all_checkins if c.status == "COMPLETED")
     p.response_rate = (completed / total) * 100 if total > 0 else 0
     p.current_day = day
 
     # Timeline
+    pain_val = responses.get("pain", "N/A") if responses else "N/A"
+    fever_val = responses.get("fever", "N/A") if responses else "N/A"
     event = TimelineEvent(
         patient_id=p.id,
         event_type="CHECKIN",
         title=f"Day {day} Check-in Completed",
-        description=f"Pain: {responses.get('pain', 'N/A
+        description=f"Pain: {pain_val}, Fever: {fever_val}",
+        day_number=day
+    )
+    db.add(event)
+
+    # Auto-escalation if CRITICAL
+    if ai_result["level"] == "CRITICAL":
+        escalation = Escalation(
+            patient_id=p.id,
+            level="CRITICAL",
+            status="OPEN",
+            trigger_type="ai_risk",
+            trigger_detail=f"Day {day} critical risk score: {ai_result['score']}",
+            description="; ".join(ai_result["reasons"])
+        )
+        db.add(escalation)
+        p.status = "ESCALATED"
+
+        # Notify family
+        family_mobile = decrypt_field(p.family_mobile)
+        await send_whatsapp_message(family_mobile, f"Ojas Alert: {decrypt_field(p.full_name)} reported critical symptoms on Day {day}. Our team has been notified.")
+
+    await db.commit()
+    await log_audit(db, request.state.user_id, hospital_id, "UPDATE", "checkins", str(checkin.id), request.client.host if request.client else "", request.headers.get("user-agent", ""))
+
+    return {
+        "message": "Check-in submitted",
+        "risk_score": ai_result["score"],
+        "risk_level": ai_result["level"],
+        "readmission_risk": p.readmission_risk,
+        "response_rate": p.response_rate
+    }
