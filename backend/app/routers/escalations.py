@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from datetime import datetime, timezone
 
 from app.core.database import get_db
@@ -23,11 +23,10 @@ class ResolveRequest(BaseModel):
 
 
 @router.get("")
-@require_permission(Permission.PATIENT_READ)
 async def list_escalations(
     request: Request, 
     db: AsyncSession = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(require_permission(Permission.PATIENT_READ)),
     status: str = "OPEN"
 ):
     hospital_id = current_user.require_hospital()
@@ -60,13 +59,12 @@ async def list_escalations(
 
 
 @router.post("/{escalation_id}/resolve")
-@require_permission(Permission.PATIENT_UPDATE)
 async def resolve_escalation(
     escalation_id: str, 
     req: ResolveRequest, 
     request: Request, 
     db: AsyncSession = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: CurrentUser = Depends(require_permission(Permission.PATIENT_UPDATE))
 ):
     hospital_id = current_user.require_hospital()
 
@@ -77,7 +75,6 @@ async def resolve_escalation(
     if not e:
         raise HTTPException(404, "Escalation not found")
 
-    # Verify patient belongs to hospital
     p_result = await db.execute(
         select(Patient).where(Patient.id == e.patient_id)
     )
@@ -93,7 +90,6 @@ async def resolve_escalation(
     e.resolved_at = datetime.now(timezone.utc)
     e.resolved_by = uuid.UUID(current_user.user_id)
 
-    # Check remaining open escalations
     open_count_result = await db.execute(
         select(Escalation).where(
             Escalation.patient_id == e.patient_id,
