@@ -31,8 +31,7 @@ async def init():
     async with engine.begin() as conn:
         def check_tables(sync_conn):
             inspector = inspect(sync_conn)
-            tables = inspector.get_table_names()
-            return tables
+            return inspector.get_table_names()
         
         tables = await conn.run_sync(check_tables)
         if 'users' not in tables:
@@ -44,6 +43,8 @@ async def init():
 asyncio.run(init())
 "
 
+# NOTE: Seeding is now handled by main.py lifespan if tables are new.
+# This block is a fallback for manual CLI runs.
 echo "=== Checking if seed data exists ==="
 python -c "
 import asyncio
@@ -65,5 +66,4 @@ asyncio.run(check_seed())
 " || python seed_data.py
 
 echo "=== Starting server ==="
-# FIX: Default port 8000 if $PORT not set (for local testing)
 exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1
