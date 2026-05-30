@@ -2,13 +2,14 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.core.database import get_db
 from app.core.tenant import require_tenant
 from app.core.encryption import decrypt_field
-from app.core.rbac import Permission, require_permission
+from app.core.rbac import Permission, require_permission, get_current_user, CurrentUser
 from app.models.escalation import Escalation
 from app.models.patient import Patient
 from app.models.timeline import TimelineEvent
@@ -18,19 +19,22 @@ router = APIRouter(prefix="/escalations", tags=["Escalations"])
 
 
 class ResolveRequest(BaseModel):
-    resolution_note: str
+    resolution_note: str = Field(..., min_length=1, max_length=1000)
 
 
 @router.get("")
 @require_permission(Permission.PATIENT_READ)
-async def list_escalations(request: Request, db: AsyncSession = Depends(get_db), status: str = "OPEN"):
-    hospital_id = require_tenant(request)
+async def list_escalations(
+    request: Request, 
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
+    status: str = "OPEN"
+):
+    hospital_id = current_user.require_hospital()
 
-    # FIX: Super Admin sees all escalations, others see only their hospital
-    query = select(Escalation).join(Patient)
+    query = select(Escalation).options(selectinload(Escalation.patient)).join(Patient)
     if hospital_id:
         query = query.where(Patient.hospital_id == uuid.UUID(hospital_id))
-
     if status:
         query = query.where(Escalation.status == status)
 
@@ -39,8 +43,7 @@ async def list_escalations(request: Request, db: AsyncSession = Depends(get_db),
 
     data = []
     for e in escalations:
-        patient_result = await db.execute(select(Patient).where(Patient.id == e.patient_id))
-        p = patient_result.scalar_one_or_none()
+        p = e.patient
         data.append({
             "id": str(e.id),
             "patient_id": str(e.patient_id),
@@ -58,41 +61,39 @@ async def list_escalations(request: Request, db: AsyncSession = Depends(get_db),
 
 @router.post("/{escalation_id}/resolve")
 @require_permission(Permission.PATIENT_UPDATE)
-async def resolve_escalation(escalation_id: str, req: ResolveRequest, request: Request, db: AsyncSession = Depends(get_db)):
-    hospital_id = require_tenant(request)
+async def resolve_escalation(
+    escalation_id: str, 
+    req: ResolveRequest, 
+    request: Request, 
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user)
+):
+    hospital_id = current_user.require_hospital()
 
-    result = await db.execute(select(Escalation).where(Escalation.id == uuid.UUID(escalation_id)))
+    result = await db.execute(
+        select(Escalation).where(Escalation.id == uuid.UUID(escalation_id))
+    )
     e = result.scalar_one_or_none()
     if not e:
         raise HTTPException(404, "Escalation not found")
 
-    # FIX: Verify patient belongs to hospital (skip for Super Admin)
-    p = None
-    if hospital_id:
-        patient_result = await db.execute(
-            select(Patient).where(
-                Patient.id == e.patient_id,
-                Patient.hospital_id == uuid.UUID(hospital_id)
-            )
-        )
-        p = patient_result.scalar_one_or_none()
-        if not p:
-            raise HTTPException(403, "Not authorized")
-    else:
-        # Super Admin can resolve any
-        patient_result = await db.execute(select(Patient).where(Patient.id == e.patient_id))
-        p = patient_result.scalar_one_or_none()
-
-    # FIX: Patient must exist before accessing p.current_day
+    # Verify patient belongs to hospital
+    p_result = await db.execute(
+        select(Patient).where(Patient.id == e.patient_id)
+    )
+    p = p_result.scalar_one_or_none()
     if not p:
         raise HTTPException(404, "Patient not found for this escalation")
+    
+    if hospital_id and str(p.hospital_id) != hospital_id:
+        raise HTTPException(403, "Not authorized to resolve this escalation")
 
     e.status = "RESOLVED"
     e.resolution_note = req.resolution_note
-    e.resolved_at = datetime.utcnow()
-    e.resolved_by = uuid.UUID(request.state.user_id) if request.state.user_id else None
+    e.resolved_at = datetime.now(timezone.utc)
+    e.resolved_by = uuid.UUID(current_user.user_id)
 
-    # FIX: Proper async count check
+    # Check remaining open escalations
     open_count_result = await db.execute(
         select(Escalation).where(
             Escalation.patient_id == e.patient_id,
@@ -108,9 +109,9 @@ async def resolve_escalation(escalation_id: str, req: ResolveRequest, request: R
         event_type="HUMAN_ACTION",
         title="Escalation Resolved",
         description=req.resolution_note,
-        day_number=p.current_day if p else 0
+        day_number=p.current_day
     )
     db.add(event)
 
     await db.commit()
-    return {"message": "Escalation resolved"}
+    return {"message": "Escalation resolved", "patient_status": p.status}
