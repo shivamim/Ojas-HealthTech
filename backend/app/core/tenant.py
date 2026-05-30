@@ -19,7 +19,7 @@ async def tenant_middleware(request: Request, call_next):
 
 def require_tenant(request: Request):
     if request.state.role == "SUPER_ADMIN":
-        return None
+        return None  # Super Admin can access all hospitals
     if not request.state.hospital_id:
         raise HTTPException(403, "Hospital context required")
     return request.state.hospital_id
