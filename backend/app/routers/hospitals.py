@@ -62,12 +62,11 @@ async def get_my_hospital(
 
 
 @router.put("/me")
-@require_permission(Permission.PATIENT_UPDATE)
 async def update_my_hospital(
     req: HospitalUpdate, 
     request: Request, 
     db: AsyncSession = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: CurrentUser = Depends(require_permission(Permission.PATIENT_UPDATE))
 ):
     hospital_id = require_tenant(request)
     
