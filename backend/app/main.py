@@ -4,7 +4,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import inspect
 from app.core.database import engine, Base, AsyncSessionLocal
-from app.core.tenant import tenant_middleware
 from app.routers import auth, superadmin, hospitals, patients, escalations, reports, whatsapp
 
 @asynccontextmanager
@@ -41,7 +40,7 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# ✅ CORS FIRST — before any other middleware
+# CORS - ONLY MIDDLEWARE
 origins_raw = os.getenv("FRONTEND_URL", "http://localhost:5173")
 origins = [o.strip() for o in origins_raw.split(",") if o.strip()]
 
@@ -49,42 +48,11 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-Requested-With", "X-Reset-Key"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=86400,
 )
-
-# ✅ Tenant middleware AFTER CORS
-@app.middleware("http")
-async def tenant_mw(request, call_next):
-    # Skip OPTIONS — CORS already handled
-    if request.method == "OPTIONS":
-        return await call_next(request)
-    
-    # Skip public paths
-    path = request.url.path
-    if path in ["/", "/health", "/docs", "/openapi.json", "/api/v1/auth/login", "/api/v1/auth/refresh"]:
-        return await call_next(request)
-    
-    # Extract tenant from token
-    auth = request.headers.get("authorization", "")
-    if auth.startswith("Bearer "):
-        token = auth.replace("Bearer ", "")
-        from app.core.security import decode_token
-        payload = decode_token(token)
-        if payload:
-            request.state.user_id = payload.get("user_id")
-            request.state.role = payload.get("role")
-            request.state.hospital_id = payload.get("hospital_id")
-        else:
-            request.state.user_id = None
-            request.state.role = None
-            request.state.hospital_id = None
-    else:
-        request.state.user_id = None
-        request.state.role = None
-        request.state.hospital_id = None
-    
-    return await call_next(request)
 
 # Routers
 app.include_router(auth.router, prefix="/api/v1")
