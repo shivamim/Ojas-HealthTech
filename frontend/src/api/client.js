@@ -1,7 +1,5 @@
 import axios from 'axios'
 
-// In production (Vercel), VITE_API_URL must be set to your Render backend URL
-// e.g. https://ojas-backend.onrender.com/api/v1
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'
 
 const api = axios.create({
@@ -11,9 +9,10 @@ const api = axios.create({
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   },
+  withCredentials: false,
 })
 
-// ── Request interceptor — attach Bearer token ─────────────────────────────
+// Request interceptor — attach Bearer token
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('access_token')
@@ -23,9 +22,7 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 )
 
-// ── Response interceptor — transparent token refresh on 401 ──────────────
-// Queues all failing requests while a refresh is in flight,
-// so only ONE refresh call is ever made at a time.
+// Response interceptor — transparent token refresh on 401
 let _refreshing = false
 let _queue = []
 
@@ -51,7 +48,6 @@ api.interceptors.response.use(
       }
 
       if (_refreshing) {
-        // Another request is already refreshing — queue this one
         return new Promise((resolve, reject) => {
           _queue.push({ resolve, reject })
         }).then((token) => {
