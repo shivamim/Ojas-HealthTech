@@ -97,7 +97,11 @@ async def create_patient(req: PatientCreate, request: Request, db: AsyncSession 
 async def list_patients(request: Request, db: AsyncSession = Depends(get_db), status: str = None, page: int = 1, limit: int = 20):
     hospital_id = require_tenant(request)
 
-    query = select(Patient).where(Patient.hospital_id == uuid.UUID(hospital_id))
+    # FIX: Super Admin sees all patients, others see only their hospital
+    query = select(Patient)
+    if hospital_id:
+        query = query.where(Patient.hospital_id == uuid.UUID(hospital_id))
+    
     if status:
         query = query.where(Patient.status == status)
 
@@ -133,7 +137,12 @@ async def list_patients(request: Request, db: AsyncSession = Depends(get_db), st
 async def get_patient(patient_id: str, request: Request, db: AsyncSession = Depends(get_db)):
     hospital_id = require_tenant(request)
 
-    result = await db.execute(select(Patient).where(Patient.id == uuid.UUID(patient_id), Patient.hospital_id == uuid.UUID(hospital_id)))
+    # FIX: Super Admin can access any patient
+    query = select(Patient).where(Patient.id == uuid.UUID(patient_id))
+    if hospital_id:
+        query = query.where(Patient.hospital_id == uuid.UUID(hospital_id))
+    
+    result = await db.execute(query)
     p = result.scalar_one_or_none()
     if not p:
         raise HTTPException(404, "Patient not found")
@@ -171,7 +180,12 @@ async def get_patient(patient_id: str, request: Request, db: AsyncSession = Depe
 async def submit_checkin(patient_id: str, day: int, request: Request, db: AsyncSession = Depends(get_db), responses: dict = None):
     hospital_id = require_tenant(request)
 
-    result = await db.execute(select(Patient).where(Patient.id == uuid.UUID(patient_id), Patient.hospital_id == uuid.UUID(hospital_id)))
+    # FIX: Super Admin can access any patient for checkin
+    query = select(Patient).where(Patient.id == uuid.UUID(patient_id))
+    if hospital_id:
+        query = query.where(Patient.hospital_id == uuid.UUID(hospital_id))
+    
+    result = await db.execute(query)
     p = result.scalar_one_or_none()
     if not p:
         raise HTTPException(404, "Patient not found")
@@ -247,7 +261,12 @@ async def submit_checkin(patient_id: str, day: int, request: Request, db: AsyncS
 async def update_patient(patient_id: str, req: PatientUpdate, request: Request, db: AsyncSession = Depends(get_db)):
     hospital_id = require_tenant(request)
 
-    result = await db.execute(select(Patient).where(Patient.id == uuid.UUID(patient_id), Patient.hospital_id == uuid.UUID(hospital_id)))
+    # FIX: Super Admin can update any patient
+    query = select(Patient).where(Patient.id == uuid.UUID(patient_id))
+    if hospital_id:
+        query = query.where(Patient.hospital_id == uuid.UUID(hospital_id))
+    
+    result = await db.execute(query)
     p = result.scalar_one_or_none()
     if not p:
         raise HTTPException(404, "Patient not found")
