@@ -13,6 +13,13 @@ from app.models.timeline import TimelineEvent
 
 async def seed():
     async with AsyncSessionLocal() as db:
+        # Check if already seeded
+        from sqlalchemy import select
+        result = await db.execute(select(User).where(User.email == 'admin@ojas.care'))
+        if result.scalar_one_or_none():
+            print("Already seeded, skipping")
+            return
+
         # Create superadmin
         superadmin = User(
             id=uuid.uuid4(),
@@ -59,15 +66,15 @@ async def seed():
         db.add(nurse)
         db.add(doctor)
 
-        # Demo patients
+        # Demo patients with realistic risk scores
         patients_data = [
-            {"name": "Rajesh Sharma", "mobile": "+91-98765-43210", "family": "+91-98765-43211", "age": 62, "surgery": "Total Knee Replacement", "doctor": "Dr. Gupta", "specialty": "Orthopedics", "discharge": date(2026, 5, 10), "status": "ESCALATED", "day": 6, "bed": "Ward-4B-12", "uhid": "UHID-2026-0042"},
-            {"name": "Priya Nair", "mobile": "+91-98765-43220", "family": "+91-98765-43221", "age": 45, "surgery": "Laparoscopic Cholecystectomy", "doctor": "Dr. Menon", "specialty": "General Surgery", "discharge": date(2026, 5, 6), "status": "ACTIVE", "day": 10, "bed": "Ward-3A-05", "uhid": "UHID-2026-0041"},
-            {"name": "Sunita Devi", "mobile": "+91-98765-43230", "family": "+91-98765-43231", "age": 68, "surgery": "CABG", "doctor": "Dr. Reddy", "specialty": "Cardiac Surgery", "discharge": date(2026, 5, 8), "status": "NO_REPLY", "day": 8, "bed": "ICU-12", "uhid": "UHID-2026-0038"},
-            {"name": "Amit Joshi", "mobile": "+91-98765-43240", "family": "+91-98765-43241", "age": 34, "surgery": "Appendectomy", "doctor": "Dr. Khan", "specialty": "General Surgery", "discharge": date(2026, 5, 3), "status": "ACTIVE", "day": 13, "bed": "Ward-2C-08", "uhid": "UHID-2026-0035"},
-            {"name": "Fatima Begum", "mobile": "+91-98765-43250", "family": "+91-98765-43251", "age": 55, "surgery": "Total Hip Replacement", "doctor": "Dr. Gupta", "specialty": "Orthopedics", "discharge": date(2026, 5, 1), "status": "COMPLETED", "day": 14, "bed": "Ward-4B-15", "uhid": "UHID-2026-0032"},
-            {"name": "Vikram Patel", "mobile": "+91-98765-43260", "family": "+91-98765-43261", "age": 48, "surgery": "Hernia Repair", "doctor": "Dr. Menon", "specialty": "General Surgery", "discharge": date(2026, 5, 9), "status": "ESCALATED", "day": 7, "bed": "Ward-3A-10", "uhid": "UHID-2026-0036"},
-            {"name": "Ramesh Iyer", "mobile": "+91-98765-43270", "family": "+91-98765-43271", "age": 58, "surgery": "Spinal Surgery", "doctor": "Dr. Khan", "specialty": "Neurosurgery", "discharge": date(2026, 5, 11), "status": "NO_REPLY", "day": 5, "bed": "Ward-5D-03", "uhid": "UHID-2026-0033"},
+            {"name": "Rajesh Sharma", "mobile": "+91-98765-43210", "family": "+91-98765-43211", "age": 62, "surgery": "Total Knee Replacement", "doctor": "Dr. Gupta", "specialty": "Orthopedics", "discharge": date(2026, 5, 10), "status": "ESCALATED", "day": 6, "bed": "Ward-4B-12", "uhid": "UHID-2026-0042", "risk_score": 85, "risk_level": "HIGH", "readmission_risk": "HIGH"},
+            {"name": "Priya Nair", "mobile": "+91-98765-43220", "family": "+91-98765-43221", "age": 45, "surgery": "Laparoscopic Cholecystectomy", "doctor": "Dr. Menon", "specialty": "General Surgery", "discharge": date(2026, 5, 6), "status": "ACTIVE", "day": 10, "bed": "Ward-3A-05", "uhid": "UHID-2026-0041", "risk_score": 25, "risk_level": "LOW", "readmission_risk": "LOW"},
+            {"name": "Sunita Devi", "mobile": "+91-98765-43230", "family": "+91-98765-43231", "age": 68, "surgery": "CABG", "doctor": "Dr. Reddy", "specialty": "Cardiac Surgery", "discharge": date(2026, 5, 8), "status": "NO_REPLY", "day": 8, "bed": "ICU-12", "uhid": "UHID-2026-0038", "risk_score": 70, "risk_level": "HIGH", "readmission_risk": "HIGH"},
+            {"name": "Amit Joshi", "mobile": "+91-98765-43240", "family": "+91-98765-43241", "age": 34, "surgery": "Appendectomy", "doctor": "Dr. Khan", "specialty": "General Surgery", "discharge": date(2026, 5, 3), "status": "ACTIVE", "day": 13, "bed": "Ward-2C-08", "uhid": "UHID-2026-0035", "risk_score": 15, "risk_level": "LOW", "readmission_risk": "LOW"},
+            {"name": "Fatima Begum", "mobile": "+91-98765-43250", "family": "+91-98765-43251", "age": 55, "surgery": "Total Hip Replacement", "doctor": "Dr. Gupta", "specialty": "Orthopedics", "discharge": date(2026, 5, 1), "status": "COMPLETED", "day": 14, "bed": "Ward-4B-15", "uhid": "UHID-2026-0032", "risk_score": 10, "risk_level": "LOW", "readmission_risk": "LOW"},
+            {"name": "Vikram Patel", "mobile": "+91-98765-43260", "family": "+91-98765-43261", "age": 48, "surgery": "Hernia Repair", "doctor": "Dr. Menon", "specialty": "General Surgery", "discharge": date(2026, 5, 9), "status": "ESCALATED", "day": 7, "bed": "Ward-3A-10", "uhid": "UHID-2026-0036", "risk_score": 75, "risk_level": "HIGH", "readmission_risk": "MEDIUM"},
+            {"name": "Ramesh Iyer", "mobile": "+91-98765-43270", "family": "+91-98765-43271", "age": 58, "surgery": "Spinal Surgery", "doctor": "Dr. Khan", "specialty": "Neurosurgery", "discharge": date(2026, 5, 11), "status": "NO_REPLY", "day": 5, "bed": "Ward-5D-03", "uhid": "UHID-2026-0033", "risk_score": 55, "risk_level": "MEDIUM", "readmission_risk": "MEDIUM"},
         ]
 
         for pdata in patients_data:
@@ -88,7 +95,10 @@ async def seed():
                 current_day=pdata["day"],
                 total_days=14,
                 instructions="Keep wound dry. Take Dolo 650 if pain. Walk 10 minutes twice daily.",
-                response_rate=85 if pdata["status"] == "ACTIVE" else 60
+                response_rate=85 if pdata["status"] == "ACTIVE" else 60 if pdata["status"] == "COMPLETED" else 30,
+                risk_score=pdata["risk_score"],
+                risk_level=pdata["risk_level"],
+                readmission_risk=pdata["readmission_risk"]
             )
             db.add(patient)
             await db.flush()
