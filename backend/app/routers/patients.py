@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Body
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from datetime import datetime, date, timezone
 from typing import Optional
 
@@ -44,16 +44,14 @@ class PatientUpdate(BaseModel):
 
 
 @router.post("")
-@require_permission(Permission.PATIENT_CREATE)
 async def create_patient(
     req: PatientCreate, 
     request: Request, 
     db: AsyncSession = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: CurrentUser = Depends(require_permission(Permission.PATIENT_CREATE))
 ):
     hospital_id = current_user.require_hospital()
-    
-    # Sanitize inputs
+
     full_name = req.full_name.strip()
     mobile = req.mobile.strip()
     family_mobile = req.family_mobile.strip()
@@ -78,7 +76,6 @@ async def create_patient(
     db.add(patient)
     await db.flush()
 
-    # Create 14-day checkin schedule
     for day in range(1, 15):
         db.add(CheckIn(
             patient_id=patient.id,
@@ -86,7 +83,6 @@ async def create_patient(
             status="PENDING"
         ))
 
-    # Timeline event
     db.add(TimelineEvent(
         patient_id=patient.id,
         event_type="ENROLLMENT",
@@ -95,7 +91,6 @@ async def create_patient(
         day_number=0
     ))
 
-    # Send welcome WhatsApp (non-blocking, ignore failures)
     try:
         await send_whatsapp_message(
             mobile, 
@@ -119,11 +114,10 @@ async def create_patient(
 
 
 @router.get("")
-@require_permission(Permission.PATIENT_READ)
 async def list_patients(
     request: Request, 
     db: AsyncSession = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(require_permission(Permission.PATIENT_READ)),
     status: str = None, 
     page: int = 1, 
     limit: int = 20
@@ -136,11 +130,9 @@ async def list_patients(
     if status:
         query = query.where(Patient.status == status)
 
-    # Count
     count_result = await db.execute(select(func.count()).select_from(query.subquery()))
     total = count_result.scalar() or 0
 
-    # Paginate
     query = query.offset((page - 1) * limit).limit(limit)
     result = await db.execute(query)
     patients = result.scalars().all()
@@ -166,12 +158,11 @@ async def list_patients(
 
 
 @router.get("/{patient_id}")
-@require_permission(Permission.PATIENT_READ)
 async def get_patient(
     patient_id: str, 
     request: Request, 
     db: AsyncSession = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: CurrentUser = Depends(require_permission(Permission.PATIENT_READ))
 ):
     hospital_id = current_user.require_hospital()
 
@@ -224,18 +215,16 @@ async def get_patient(
 
 
 @router.post("/{patient_id}/checkin/{day}")
-@require_permission(Permission.PATIENT_UPDATE)
 async def submit_checkin(
     patient_id: str, 
     day: int, 
     request: Request, 
     db: AsyncSession = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(require_permission(Permission.PATIENT_UPDATE)),
     responses: dict = Body(default={})
 ):
     hospital_id = current_user.require_hospital()
 
-    # Load patient with relationships
     query = select(Patient).options(
         selectinload(Patient.checkins),
         selectinload(Patient.escalations)
@@ -266,29 +255,24 @@ async def submit_checkin(
     except (ValueError, TypeError):
         checkin.pain_level = 0
 
-    # AI Risk Scoring
     ai_result = calculate_risk_score(checkin.responses, {"response_rate": p.response_rate})
     checkin.risk_score = ai_result["score"]
     checkin.risk_level = ai_result["level"]
     checkin.risk_reasons = ai_result["reasons"]
 
-    # Update patient aggregate risk
     p.risk_score = ai_result["score"]
     p.risk_level = ai_result["level"]
 
-    # Calculate response rate
     all_checkins = p.checkins
     total = len(all_checkins)
     completed = sum(1 for c in all_checkins if c.status == "COMPLETED")
     p.response_rate = (completed / total) * 100 if total > 0 else 0
     p.current_day = day
 
-    # Readmission risk (pre-computed counts to avoid lazy loading)
     missed_count = sum(1 for c in all_checkins if c.status == "MISSED")
     open_esc_count = sum(1 for e in p.escalations if e.status == "OPEN")
     p.readmission_risk = predict_readmission_risk(p, missed_count, open_esc_count)
 
-    # Timeline
     fever_val = responses.get("fever", "N/A") if responses else "N/A"
     event = TimelineEvent(
         patient_id=p.id,
@@ -299,7 +283,6 @@ async def submit_checkin(
     )
     db.add(event)
 
-    # Auto-escalation if CRITICAL
     if ai_result["level"] == "CRITICAL":
         escalation = Escalation(
             patient_id=p.id,
@@ -312,7 +295,6 @@ async def submit_checkin(
         db.add(escalation)
         p.status = "ESCALATED"
 
-        # Notify family (non-blocking)
         try:
             family_mobile = decrypt_field(p.family_mobile)
             await send_whatsapp_message(
