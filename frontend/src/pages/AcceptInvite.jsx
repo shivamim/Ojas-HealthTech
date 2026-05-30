@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import axios from 'axios'
+import { useAuth } from '../context/AuthContext'   // ← ADDED
 import api from '../api/client'
 import { Stethoscope, CheckCircle } from 'lucide-react'
 
@@ -10,8 +11,9 @@ const AcceptInvite = () => {
   const [searchParams] = useSearchParams()
   const token = searchParams.get('token')
   const navigate = useNavigate()
+  const { login } = useAuth()                      // ← ADDED
 
-  const [step, setStep] = useState('verifying') // verifying, form, success
+  const [step, setStep] = useState('verifying')
   const [inviteData, setInviteData] = useState(null)
   const [fullName, setFullName] = useState('')
   const [password, setPassword] = useState('')
@@ -67,9 +69,7 @@ const AcceptInvite = () => {
         password
       })
 
-      localStorage.setItem('access_token', data.access_token)
-      localStorage.setItem('refresh_token', data.refresh_token)
-      localStorage.setItem('user', JSON.stringify(data.user))
+      login(data)                                   // ← ADDED: updates AuthContext instantly
       setStep('success')
       setTimeout(() => navigate('/dashboard'), 1500)
     } catch (err) {
