@@ -13,12 +13,22 @@ kdf = PBKDF2HMAC(
 KEY = base64.urlsafe_b64encode(kdf.derive(settings.ENCRYPTION_KEY.encode()))
 fernet = Fernet(KEY)
 
+
 def encrypt_field(plaintext: str) -> str:
     if not plaintext:
         return ""
-    return fernet.encrypt(plaintext.encode()).decode()
+    try:
+        return fernet.encrypt(plaintext.encode()).decode()
+    except Exception as e:
+        raise ValueError(f"Encryption failed: {str(e)}")
+
 
 def decrypt_field(ciphertext: str) -> str:
     if not ciphertext:
         return ""
-    return fernet.decrypt(ciphertext.encode()).decode()
+    try:
+        return fernet.decrypt(ciphertext.encode()).decode()
+    except Exception as e:
+        # Log error but don't crash — return placeholder for corrupted data
+        print(f"Decryption error: {e}")
+        return "[ENCRYPTED]"
