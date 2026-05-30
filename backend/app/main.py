@@ -3,6 +3,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -17,12 +18,14 @@ from app.core.database import engine, Base, AsyncSessionLocal
 from app.core.config import settings
 from app.routers import auth, superadmin, hospitals, patients, escalations, reports, whatsapp
 
+# ── Rate Limiter ───────────────────────────────────────────────────────────
 limiter = Limiter(key_func=get_remote_address)
 
+# ── Lifespan ─────────────────────────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print(f"🚀 Starting Ojas V3 in {settings.ENVIRONMENT} mode")
-    
+
     async with engine.begin() as conn:
         def check_tables(sync_conn):
             inspector = inspect(sync_conn)
@@ -32,7 +35,7 @@ async def lifespan(app: FastAPI):
         except SQLAlchemyError as e:
             print(f"❌ Database connection failed: {e}")
             tables = []
-    
+
     if 'users' not in tables:
         print("📊 Tables not found — creating...")
         try:
@@ -43,7 +46,7 @@ async def lifespan(app: FastAPI):
             print(f"❌ Failed to create tables: {e}")
     else:
         print("✅ Tables already exist")
-    
+
     if 'users' not in tables:
         print("🌱 Running seed data...")
         try:
@@ -53,11 +56,12 @@ async def lifespan(app: FastAPI):
                 print("✅ Seed data loaded")
         except Exception as e:
             print(f"⚠️ Seed data error: {e}")
-    
+
     yield
     print("🛑 Shutting down...")
     await engine.dispose()
 
+# ── App Instance ─────────────────────────────────────────────────────────────
 app = FastAPI(
     title="Ojas V3 — Post-Discharge Recovery Monitoring",
     description="NABH-Compliant | AI-Powered | Multi-Tenant",
@@ -68,11 +72,11 @@ app = FastAPI(
     redoc_url=None,
 )
 
-# Rate limiting
+# ── Rate Limiting ──────────────────────────────────────────────────────────
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# CORS — MUST be first
+# ── CORS (MUST be first middleware) ─────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -84,28 +88,39 @@ app.add_middleware(
     max_age=86400,
 )
 
-# GZip for responses > 1KB
+# ── GZip Compression ─────────────────────────────────────────────────────────
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
-# Request ID + Timing middleware
+# ── Request ID + Timing Middleware ───────────────────────────────────────────
 @app.middleware("http")
 async def add_request_metadata(request: Request, call_next):
     request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
     request.state.request_id = request_id
     start_time = time.time()
-    
+
     response = await call_next(request)
     process_time = time.time() - start_time
-    
+
     response.headers["X-Request-ID"] = request_id
     response.headers["X-Process-Time"] = str(round(process_time, 4))
-    
+
     if process_time > 1.0:
         print(f"⚠️ Slow request: {request.method} {request.url.path} took {process_time:.2f}s [{request_id}]")
-    
+
     return response
 
-# Global exception handlers
+# ── Security Headers Middleware ────────────────────────────────────────────
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    return response
+
+# ── Global Exception Handlers ───────────────────────────────────────────────
 @app.exception_handler(SQLAlchemyError)
 async def sqlalchemy_exception_handler(request: Request, exc: SQLAlchemyError):
     req_id = getattr(request.state, "request_id", None)
@@ -124,7 +139,7 @@ async def general_exception_handler(request: Request, exc: Exception):
         content={"detail": "Internal server error", "request_id": req_id}
     )
 
-# Routers
+# ── Routers ──────────────────────────────────────────────────────────────────
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(superadmin.router, prefix="/api/v1")
 app.include_router(hospitals.router, prefix="/api/v1")
@@ -133,6 +148,7 @@ app.include_router(escalations.router, prefix="/api/v1")
 app.include_router(reports.router, prefix="/api/v1")
 app.include_router(whatsapp.router, prefix="/api/v1")
 
+# ── Root Endpoint ───────────────────────────────────────────────────────────
 @app.get("/")
 async def root():
     return {
@@ -143,6 +159,7 @@ async def root():
         "docs": "/docs" if settings.ENVIRONMENT != "production" else None
     }
 
+# ── Health Check ────────────────────────────────────────────────────────────
 @app.get("/health")
 async def health():
     try:
@@ -152,7 +169,7 @@ async def health():
     except Exception as e:
         print(f"Health check DB error: {e}")
         db_healthy = False
-    
+
     return {
         "status": "healthy" if db_healthy else "degraded",
         "database": "connected" if db_healthy else "disconnected",
