@@ -1,195 +1,175 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
+import axios from 'axios'
 import api from '../api/client'
-import { Stethoscope, AlertCircle, Loader2, CheckCircle } from 'lucide-react'
+import { Stethoscope, CheckCircle } from 'lucide-react'
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'
 
 const AcceptInvite = () => {
   const [searchParams] = useSearchParams()
-  const navigate = useNavigate()
-  const { login } = useAuth()
   const token = searchParams.get('token')
+  const navigate = useNavigate()
 
-  const [valid, setValid] = useState(null)
-  const [email, setEmail] = useState('')
+  const [step, setStep] = useState('verifying') // verifying, form, success
+  const [inviteData, setInviteData] = useState(null)
   const [fullName, setFullName] = useState('')
   const [password, setPassword] = useState('')
-  const [confirm, setConfirm] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [verifyLoading, setVerifyLoading] = useState(true)
 
   useEffect(() => {
     if (!token) {
-      setValid(false)
-      setVerifyLoading(false)
+      setError('Invalid invite link. No token provided.')
+      setStep('error')
       return
     }
 
-    const verifyToken = async () => {
-      try {
-        // FIX: Use api instance + POST endpoint (backend mein POST hai)
-        const { data } = await api.post('/auth/verify-invite', { token })
-        if (data.valid) {
-          setValid(true)
-          setEmail(data.email)
-        } else {
-          setValid(false)
-        }
-      } catch (err) {
-        console.error('Invite verification failed:', err)
-        setValid(false)
-      } finally {
-        setVerifyLoading(false)
-      }
-    }
-
-    verifyToken()
+    axios.post(`${API_URL}/auth/verify-invite`, { token })
+      .then((res) => {
+        setInviteData(res.data)
+        setStep('form')
+      })
+      .catch((err) => {
+        setError(err.response?.data?.detail || 'Invalid or expired invite link.')
+        setStep('error')
+      })
   }, [token])
+
+  const validatePassword = (pwd) => {
+    if (pwd.length < 8) return 'At least 8 characters'
+    if (!/[A-Z]/.test(pwd)) return 'At least one uppercase letter'
+    if (!/[a-z]/.test(pwd)) return 'At least one lowercase letter'
+    if (!/[0-9]/.test(pwd)) return 'At least one digit'
+    return null
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
 
-    // Validation
-    if (password !== confirm) {
-      setError('Passwords do not match')
+    const pwdError = validatePassword(password)
+    if (pwdError) {
+      setError(pwdError)
       return
     }
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters')
+    if (password !== confirmPassword) {
+      setError('Passwords do not match')
       return
     }
 
     setLoading(true)
     try {
-      // FIX: Use api instance
-      const { data } = await api.post('/auth/accept-invite', {
+      const { data } = await axios.post(`${API_URL}/auth/accept-invite`, {
         token,
         full_name: fullName,
         password
       })
 
-      // Store auth data
       localStorage.setItem('access_token', data.access_token)
       localStorage.setItem('refresh_token', data.refresh_token)
       localStorage.setItem('user', JSON.stringify(data.user))
-      
-      // Update auth context
-      login(data.user)
-      
-      // Navigate to dashboard
-      navigate('/dashboard')
+      setStep('success')
+      setTimeout(() => navigate('/dashboard'), 1500)
     } catch (err) {
-      console.error('Accept invite failed:', err)
-      setError(err.response?.data?.detail || 'Failed to accept invite. Please try again.')
+      setError(err.response?.data?.detail || 'Failed to accept invite.')
     } finally {
       setLoading(false)
     }
   }
 
-  // Loading state
-  if (verifyLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-ojas-50 to-blue-100">
-        <div className="text-center">
-          <Loader2 className="animate-spin text-ojas-600 mx-auto mb-4" size={48} />
-          <p className="text-gray-600">Verifying your invite...</p>
-        </div>
-      </div>
-    )
-  }
-
-  // Invalid invite
-  if (valid === false) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-ojas-50 to-blue-100">
-        <div className="bg-white rounded-xl shadow-lg p-8 text-center max-w-md">
-          <AlertCircle size={48} className="mx-auto text-red-500 mb-4" />
-          <h2 className="text-xl font-bold text-gray-900">Invalid Invite</h2>
-          <p className="text-gray-500 mt-2">This invite link is invalid or has expired.</p>
-          <button 
-            onClick={() => navigate('/login')}
-            className="mt-6 px-4 py-2 bg-ojas-600 text-white rounded-lg hover:bg-ojas-700 transition-colors"
-          >
-            Go to Login
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  // Success form
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-ojas-50 to-blue-100">
-      <div className="w-full max-w-md p-4">
-        <div className="bg-white rounded-xl shadow-xl p-8">
-          <div className="text-center mb-6">
-            <div className="w-16 h-16 bg-ojas-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <Stethoscope size={32} className="text-white" />
-            </div>
-            <h1 className="text-2xl font-bold text-gray-900">Accept Invite</h1>
-            <p className="text-gray-500 mt-1">Create your account for <span className="font-medium text-gray-700">{email}</span></p>
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <div className="w-full max-w-md">
+        <div className="text-center mb-8">
+          <div className="w-16 h-16 bg-ojas-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <Stethoscope className="text-white w-8 h-8" />
           </div>
+          <h1 className="text-2xl font-bold text-gray-900">Join Ojas</h1>
+        </div>
 
-          {error && (
-            <div className="mb-4 p-3 bg-red-50 text-red-700 text-sm rounded-lg border border-red-200 flex items-center gap-2">
-              <AlertCircle size={16} />
+        <div className="card">
+          {step === 'verifying' && (
+            <div className="text-center py-8">
+              <div className="w-8 h-8 border-2 border-ojas-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+              <p className="text-gray-600">Verifying your invite...</p>
+            </div>
+          )}
+
+          {step === 'error' && (
+            <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
               {error}
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
-              <input 
-                value={fullName} 
-                onChange={(e) => setFullName(e.target.value)} 
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ojas-500 focus:border-transparent"
-                placeholder="Dr. Rajesh Kumar" 
-                required 
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-              <input 
-                type="password" 
-                value={password} 
-                onChange={(e) => setPassword(e.target.value)} 
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ojas-500 focus:border-transparent"
-                placeholder="Min 6 characters" 
-                required 
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Password</label>
-              <input 
-                type="password" 
-                value={confirm} 
-                onChange={(e) => setConfirm(e.target.value)} 
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ojas-500 focus:border-transparent"
-                placeholder="Repeat password" 
-                required 
-              />
-            </div>
-            <button 
-              type="submit" 
-              disabled={loading} 
-              className="w-full px-4 py-3 bg-ojas-600 text-white rounded-lg hover:bg-ojas-700 disabled:opacity-50 font-medium transition-colors flex items-center justify-center gap-2"
-            >
-              {loading ? (
-                <>
-                  <Loader2 size={18} className="animate-spin" />
-                  Creating Account...
-                </>
-              ) : (
-                <>
-                  <CheckCircle size={18} />
-                  Create Account & Login
-                </>
+          {step === 'form' && (
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="p-3 bg-ojas-50 border border-ojas-100 rounded-lg">
+                <p className="text-sm text-gray-600">Invited as</p>
+                <p className="font-semibold text-ojas-800">{inviteData?.email}</p>
+                <p className="text-xs text-gray-500 mt-0.5">Role: {inviteData?.role}</p>
+              </div>
+
+              {error && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                  {error}
+                </div>
               )}
-            </button>
-          </form>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+                <input
+                  type="text"
+                  required
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  className="input"
+                  placeholder="Dr. A. Sharma"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                <input
+                  type="password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="input"
+                  placeholder="Min 8 chars, upper, lower, digit"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Password</label>
+                <input
+                  type="password"
+                  required
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="input"
+                  placeholder="Repeat password"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full btn-primary py-2.5 disabled:opacity-60"
+              >
+                {loading ? 'Creating Account...' : 'Accept Invite & Join'}
+              </button>
+            </form>
+          )}
+
+          {step === 'success' && (
+            <div className="text-center py-8">
+              <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-3" />
+              <h3 className="text-lg font-semibold text-gray-900">Account Created!</h3>
+              <p className="text-gray-500 text-sm mt-1">Redirecting to dashboard...</p>
+            </div>
+          )}
         </div>
       </div>
     </div>
