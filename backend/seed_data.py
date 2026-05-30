@@ -112,13 +112,15 @@ async def seed():
                     elif pdata["status"] == "ESCALATED": cstatus = "ESCALATED"
                     else: cstatus = "COMPLETED"
 
+                base_date = datetime.combine(pdata["discharge"], datetime.min.time()).replace(hour=10, minute=0)
+                
                 db.add(CheckIn(
                     id=uuid.uuid4(),
                     patient_id=patient.id,
                     day_number=d,
                     status=cstatus,
-                    sent_at=datetime(2026, 5, pdata["discharge"].day, 10, 0) + timedelta(days=d),
-                    replied_at=datetime(2026, 5, pdata["discharge"].day, 10, 15) + timedelta(days=d) if cstatus == "COMPLETED" else None,
+                    sent_at=base_date + timedelta(days=d),
+                    replied_at=base_date + timedelta(days=d, minutes=15) if cstatus == "COMPLETED" else None,
                     responses={"pain": "2", "fever": "no"} if cstatus == "COMPLETED" else {}
                 ))
 
