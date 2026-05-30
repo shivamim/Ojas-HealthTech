@@ -23,7 +23,11 @@ class ResolveRequest(BaseModel):
 async def list_escalations(request: Request, db: AsyncSession = Depends(get_db), status: str = "OPEN"):
     hospital_id = require_tenant(request)
 
-    query = select(Escalation).join(Patient).where(Patient.hospital_id == uuid.UUID(hospital_id))
+    # FIX: Super Admin sees all escalations, others see only their hospital
+    query = select(Escalation).join(Patient)
+    if hospital_id:
+        query = query.where(Patient.hospital_id == uuid.UUID(hospital_id))
+    
     if status:
         query = query.where(Escalation.status == status)
 
@@ -58,11 +62,16 @@ async def resolve_escalation(escalation_id: str, req: ResolveRequest, request: R
     if not e:
         raise HTTPException(404, "Escalation not found")
 
-    # Verify patient belongs to hospital
-    patient_result = await db.execute(select(Patient).where(Patient.id == e.patient_id, Patient.hospital_id == uuid.UUID(hospital_id)))
-    p = patient_result.scalar_one_or_none()
-    if not p:
-        raise HTTPException(403, "Not authorized")
+    # FIX: Verify patient belongs to hospital (skip for Super Admin)
+    if hospital_id:
+        patient_result = await db.execute(select(Patient).where(Patient.id == e.patient_id, Patient.hospital_id == uuid.UUID(hospital_id)))
+        p = patient_result.scalar_one_or_none()
+        if not p:
+            raise HTTPException(403, "Not authorized")
+    else:
+        # Super Admin can resolve any
+        patient_result = await db.execute(select(Patient).where(Patient.id == e.patient_id))
+        p = patient_result.scalar_one_or_none()
 
     e.status = "RESOLVED"
     e.resolution_note = req.resolution_note
