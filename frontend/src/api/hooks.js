@@ -53,7 +53,7 @@ export const useHospitals = () => {
       const { data } = await api.get('/superadmin/hospitals')
       return data
     },
-    enabled: false
+    enabled: true        // ← FIXED: was false, now auto-fetches
   })
 }
 
