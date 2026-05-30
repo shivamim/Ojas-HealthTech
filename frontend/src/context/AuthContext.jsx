@@ -22,26 +22,20 @@ export const AuthProvider = ({ children }) => {
     setLoading(false)
   }, [])
 
-  /**
-   * Accepts full API response: { access_token, refresh_token, user: {...} }
-   * OR just the user object (fallback for any legacy calls)
-   */
   const login = (responseOrUser) => {
     let userData, accessToken, refreshToken
 
     if (responseOrUser?.access_token) {
-      // Full API response from Login.jsx
-      accessToken  = responseOrUser.access_token
+      accessToken = responseOrUser.access_token
       refreshToken = responseOrUser.refresh_token
-      userData     = responseOrUser.user
+      userData = responseOrUser.user
     } else {
-      // Bare user object fallback
-      userData     = responseOrUser
-      accessToken  = responseOrUser?.access_token
+      userData = responseOrUser
+      accessToken = responseOrUser?.access_token
       refreshToken = responseOrUser?.refresh_token
     }
 
-    if (accessToken)  localStorage.setItem('access_token', accessToken)
+    if (accessToken) localStorage.setItem('access_token', accessToken)
     if (refreshToken) localStorage.setItem('refresh_token', refreshToken)
     localStorage.setItem('user', JSON.stringify(userData))
     setUser(userData)
@@ -51,7 +45,7 @@ export const AuthProvider = ({ children }) => {
     try {
       await api.post('/auth/logout')
     } catch (e) {
-      // Ignore API errors — always clear local state
+      // Ignore
     } finally {
       localStorage.removeItem('access_token')
       localStorage.removeItem('refresh_token')
@@ -61,12 +55,12 @@ export const AuthProvider = ({ children }) => {
     }
   }
 
-  const isSuperAdmin    = user?.role === 'SUPER_ADMIN'
+  const isSuperAdmin = user?.role === 'SUPER_ADMIN'
   const isHospitalAdmin = user?.role === 'HOSPITAL_ADMIN'
-  const isCoordinator   = user?.role === 'COORDINATOR'
-  const isDoctor        = user?.role === 'DOCTOR'
-  const hasRole         = (role) => user?.role === role
-  const isLoggedIn      = !!user
+  const isCoordinator = user?.role === 'COORDINATOR'
+  const isDoctor = user?.role === 'DOCTOR'
+  const hasRole = (role) => user?.role === role
+  const isLoggedIn = !!user
 
   return (
     <AuthContext.Provider value={{
