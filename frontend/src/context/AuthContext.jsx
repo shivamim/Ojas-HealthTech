@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react'
+import api from '../api/client'  // ADD THIS
 
 const AuthContext = createContext(null)
 
@@ -21,7 +22,12 @@ export const AuthProvider = ({ children }) => {
     localStorage.setItem('user', JSON.stringify(userData))
   }
 
-  const logout = () => {
+  const logout = async () => {  // CHANGED: async add kiya
+    try {
+      await api.post('/auth/logout')  // ADDED: API call
+    } catch (e) {
+      console.log('Logout error:', e)
+    }
     setUser(null)
     localStorage.clear()
     window.location.href = '/login'
