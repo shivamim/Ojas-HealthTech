@@ -41,7 +41,7 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS — MUST BE FIRST (before tenant middleware)
+# ✅ CORS FIRST — before any other middleware
 origins_raw = os.getenv("FRONTEND_URL", "http://localhost:5173")
 origins = [o.strip() for o in origins_raw.split(",") if o.strip()]
 
@@ -53,10 +53,38 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "X-Requested-With", "X-Reset-Key"],
 )
 
-# Tenant middleware — AFTER CORS
+# ✅ Tenant middleware AFTER CORS
 @app.middleware("http")
 async def tenant_mw(request, call_next):
-    return await tenant_middleware(request, call_next)
+    # Skip OPTIONS — CORS already handled
+    if request.method == "OPTIONS":
+        return await call_next(request)
+    
+    # Skip public paths
+    path = request.url.path
+    if path in ["/", "/health", "/docs", "/openapi.json", "/api/v1/auth/login", "/api/v1/auth/refresh"]:
+        return await call_next(request)
+    
+    # Extract tenant from token
+    auth = request.headers.get("authorization", "")
+    if auth.startswith("Bearer "):
+        token = auth.replace("Bearer ", "")
+        from app.core.security import decode_token
+        payload = decode_token(token)
+        if payload:
+            request.state.user_id = payload.get("user_id")
+            request.state.role = payload.get("role")
+            request.state.hospital_id = payload.get("hospital_id")
+        else:
+            request.state.user_id = None
+            request.state.role = None
+            request.state.hospital_id = None
+    else:
+        request.state.user_id = None
+        request.state.role = None
+        request.state.hospital_id = None
+    
+    return await call_next(request)
 
 # Routers
 app.include_router(auth.router, prefix="/api/v1")
