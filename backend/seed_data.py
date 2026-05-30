@@ -1,37 +1,55 @@
 import asyncio
 import uuid
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+
 from app.core.database import AsyncSessionLocal
 from app.core.security import get_password_hash
 from app.core.encryption import encrypt_field
-from app.models.user import User
-from app.models.hospital import Hospital
-from app.models.patient import Patient
-from app.models.checkin import CheckIn
-from app.models.escalation import Escalation
-from app.models.timeline import TimelineEvent
 
-async def seed():
-    async with AsyncSessionLocal() as db:
-        # Check if already seeded
-        from sqlalchemy import select
-        result = await db.execute(select(User).where(User.email == 'admin@ojas.care'))
+# Delayed imports to avoid circular dependency issues during startup
+async def seed(db: AsyncSession = None):
+    """
+    Seed the database with demo data.
+    If db is provided, uses that session (called from main.py lifespan).
+    If not, creates a new session (called standalone).
+    """
+    close_session = False
+    if db is None:
+        db = AsyncSessionLocal()
+        close_session = True
+
+    try:
+        # ── Idempotency check ──────────────────────────────────────────────
+        from app.models.user import User
+        result = await db.execute(
+            select(User).where(User.email == "admin@ojas.care")
+        )
         if result.scalar_one_or_none():
-            print("Already seeded, skipping")
+            print("✅ Seed data already exists, skipping")
             return
 
-        # Create superadmin
+        # ── Imports ─────────────────────────────────────────────────────────
+        from app.models.hospital import Hospital
+        from app.models.patient import Patient
+        from app.models.checkin import CheckIn
+        from app.models.escalation import Escalation
+        from app.models.timeline import TimelineEvent
+
+        # ── Superadmin ─────────────────────────────────────────────────────
         superadmin = User(
             id=uuid.uuid4(),
             email="admin@ojas.care",
             hashed_password=get_password_hash("admin123"),
             full_name="System Superadmin",
             role="SUPER_ADMIN",
-            hospital_id=None
+            hospital_id=None,
+            is_active=True  # FIXED: Boolean, not string
         )
         db.add(superadmin)
 
-        # Create demo hospital
+        # ── Demo Hospital ────────────────────────────────────────────────────
         hospital = Hospital(
             id=uuid.uuid4(),
             name="City Hospital",
@@ -41,19 +59,21 @@ async def seed():
             nabh_level="Entry Level",
             contact_email=encrypt_field("admin@cityhospital.com"),
             contact_phone=encrypt_field("+91-120-4567890"),
-            plan_type="professional"
+            plan_type="professional",
+            is_active=True
         )
         db.add(hospital)
         await db.flush()
 
-        # Create hospital users
+        # ── Hospital Users ───────────────────────────────────────────────────
         nurse = User(
             id=uuid.uuid4(),
             email="nurse@cityhospital.com",
             hashed_password=get_password_hash("nurse123"),
             full_name="Nurse Anita",
             role="COORDINATOR",
-            hospital_id=hospital.id
+            hospital_id=hospital.id,
+            is_active=True
         )
         doctor = User(
             id=uuid.uuid4(),
@@ -61,12 +81,13 @@ async def seed():
             hashed_password=get_password_hash("doctor123"),
             full_name="Dr. Gupta",
             role="DOCTOR",
-            hospital_id=hospital.id
+            hospital_id=hospital.id,
+            is_active=True
         )
         db.add(nurse)
         db.add(doctor)
 
-        # Demo patients
+        # ── Patient Data ─────────────────────────────────────────────────────
         patients_data = [
             {"name": "Rajesh Sharma", "mobile": "+91-98765-43210", "family": "+91-98765-43211", "age": 62, "surgery": "Total Knee Replacement", "doctor": "Dr. Gupta", "specialty": "Orthopedics", "discharge": date(2026, 5, 10), "status": "ESCALATED", "day": 6, "bed": "Ward-4B-12", "uhid": "UHID-2026-0042", "risk_score": 85, "risk_level": "HIGH", "readmission_risk": "HIGH"},
             {"name": "Priya Nair", "mobile": "+91-98765-43220", "family": "+91-98765-43221", "age": 45, "surgery": "Laparoscopic Cholecystectomy", "doctor": "Dr. Menon", "specialty": "General Surgery", "discharge": date(2026, 5, 6), "status": "ACTIVE", "day": 10, "bed": "Ward-3A-05", "uhid": "UHID-2026-0041", "risk_score": 25, "risk_level": "LOW", "readmission_risk": "LOW"},
@@ -78,6 +99,9 @@ async def seed():
         ]
 
         for pdata in patients_data:
+            # FIXED: Use timezone-aware datetime
+            discharge_dt = datetime.combine(pdata["discharge"], datetime.min.time())
+            
             patient = Patient(
                 id=uuid.uuid4(),
                 hospital_id=hospital.id,
@@ -86,7 +110,7 @@ async def seed():
                 family_mobile=encrypt_field(pdata["family"]),
                 age=pdata["age"],
                 surgery_type=pdata["surgery"],
-                discharge_date=datetime.combine(pdata["discharge"], datetime.min.time()),
+                discharge_date=discharge_dt,
                 doctor_name=encrypt_field(pdata["doctor"]),
                 doctor_specialty=pdata["specialty"],
                 bed_number=encrypt_field(pdata["bed"]),
@@ -103,27 +127,33 @@ async def seed():
             db.add(patient)
             await db.flush()
 
+            # Create 14-day checkin schedule
+            base_sent = discharge_dt.replace(hour=10, minute=0)
+            
             for d in range(1, 15):
-                cstatus = "PENDING"
                 if d < pdata["day"]:
                     cstatus = "COMPLETED"
                 elif d == pdata["day"]:
-                    if pdata["status"] == "NO_REPLY": cstatus = "MISSED"
-                    elif pdata["status"] == "ESCALATED": cstatus = "ESCALATED"
-                    else: cstatus = "COMPLETED"
+                    if pdata["status"] == "NO_REPLY":
+                        cstatus = "MISSED"
+                    elif pdata["status"] == "ESCALATED":
+                        cstatus = "ESCALATED"
+                    else:
+                        cstatus = "COMPLETED"
+                else:
+                    cstatus = "PENDING"
 
-                base_date = datetime.combine(pdata["discharge"], datetime.min.time()).replace(hour=10, minute=0)
-                
                 db.add(CheckIn(
                     id=uuid.uuid4(),
                     patient_id=patient.id,
                     day_number=d,
                     status=cstatus,
-                    sent_at=base_date + timedelta(days=d),
-                    replied_at=base_date + timedelta(days=d, minutes=15) if cstatus == "COMPLETED" else None,
+                    sent_at=base_sent + timedelta(days=d),
+                    replied_at=base_sent + timedelta(days=d, minutes=15) if cstatus == "COMPLETED" else None,
                     responses={"pain": "2", "fever": "no"} if cstatus == "COMPLETED" else {}
                 ))
 
+            # Enrollment timeline event
             db.add(TimelineEvent(
                 id=uuid.uuid4(),
                 patient_id=patient.id,
@@ -133,6 +163,7 @@ async def seed():
                 day_number=0
             ))
 
+            # Escalations for ESCALATED patients
             if pdata["status"] == "ESCALATED":
                 db.add(Escalation(
                     id=uuid.uuid4(),
@@ -153,6 +184,7 @@ async def seed():
                     day_number=pdata["day"]
                 ))
 
+            # Escalations for NO_REPLY patients
             if pdata["status"] == "NO_REPLY":
                 db.add(Escalation(
                     id=uuid.uuid4(),
@@ -166,7 +198,16 @@ async def seed():
                 ))
 
         await db.commit()
-        print("Seed complete: 1 superadmin, 1 hospital, 2 users, 7 patients")
+        print("✅ Seed complete: 1 superadmin, 1 hospital, 2 users, 7 patients")
+
+    except Exception as e:
+        await db.rollback()
+        print(f"❌ Seed error: {e}")
+        raise
+    finally:
+        if close_session:
+            await db.close()
+
 
 if __name__ == "__main__":
     asyncio.run(seed())
