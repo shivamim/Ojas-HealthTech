@@ -1,9 +1,10 @@
-import uuid, secrets
+import uuid
+import secrets
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from pydantic import BaseModel, EmailStr
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 
 from app.core.database import get_db
 from app.core.rbac import Permission, require_permission
@@ -112,21 +113,21 @@ async def invite_user(hospital_id: str, req: InviteCreate, request: Request, db:
         email=req.email,
         role=req.role,
         token=token,
-        expires_at=datetime.utcnow() + timedelta(hours=48),
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=48),
         created_by=uuid.UUID(request.state.user_id) if request.state.user_id else None
     )
     db.add(invite)
     await db.commit()
 
-    # In production: send email with https://ojas.care/invite?token=xxx
     return {
         "message": "Invite created",
         "token": token,
         "link": f"https://ojas.care/accept-invite?token={token}"
     }
 
+# FIX: Permission.SUPERADMIN → Permission.HOSPITAL_MANAGE (Super Admin already has all permissions)
 @router.get("/audit-logs")
-@require_permission(Permission.SUPERADMIN)
+@require_permission(Permission.HOSPITAL_MANAGE)
 async def get_audit_logs(request: Request, db: AsyncSession = Depends(get_db), limit: int = 100):
     if request.state.role != "SUPER_ADMIN":
         raise HTTPException(403, "Superadmin only")
