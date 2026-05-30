@@ -4,37 +4,42 @@ from sqlalchemy.orm import declarative_base
 from sqlalchemy.pool import NullPool
 from app.core.config import settings
 
-# Use NullPool for serverless environments (Render free tier)
-# NullPool doesn't maintain persistent connections — perfect for serverless
-poolclass = NullPool if os.getenv("RENDER") or os.getenv("VERCEL") else None
+use_null_pool = os.getenv("RENDER") or os.getenv("VERCEL")
 
-engine = create_async_engine(
-    settings.DATABASE_URL,
-    echo=False,
-    future=True,
-    poolclass=poolclass,
-    pool_pre_ping=True,      # Verify connection before using (prevents stale connections)
-    pool_recycle=300,        # Recycle connections every 5 minutes
-    pool_size=5,             # Max 5 connections (Render free tier limit)
-    max_overflow=0,          # No extra connections
-)
+if use_null_pool:
+    engine = create_async_engine(
+        settings.DATABASE_URL,
+        echo=False,
+        future=True,
+        poolclass=NullPool,
+        pool_pre_ping=True,
+    )
+else:
+    engine = create_async_engine(
+        settings.DATABASE_URL,
+        echo=False,
+        future=True,
+        pool_pre_ping=True,
+        pool_recycle=300,
+        pool_size=5,
+        max_overflow=0,
+    )
 
 AsyncSessionLocal = async_sessionmaker(
-    engine, 
-    class_=AsyncSession, 
+    engine,
+    class_=AsyncSession,
     expire_on_commit=False,
-    autoflush=False        # Better performance, explicit control
+    autoflush=False
 )
 
 Base = declarative_base()
-
 
 async def get_db():
     async with AsyncSessionLocal() as session:
         try:
             yield session
         except Exception:
-            await session.rollback()  # FIX: Rollback on error
+            await session.rollback()
             raise
         finally:
             await session.close()
