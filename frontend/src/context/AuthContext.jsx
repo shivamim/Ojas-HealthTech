@@ -15,64 +15,71 @@ export const AuthProvider = ({ children }) => {
       try {
         setUser(JSON.parse(stored))
       } catch (e) {
-        console.error('Failed to parse user:', e)
+        console.error('Failed to parse stored user:', e)
         localStorage.removeItem('user')
       }
     }
     setLoading(false)
   }, [])
 
-  const login = (userData) => {
-    setUser(userData)
+  /**
+   * Accepts full API response: { access_token, refresh_token, user: {...} }
+   * OR just the user object (fallback for any legacy calls)
+   */
+  const login = (responseOrUser) => {
+    let userData, accessToken, refreshToken
+
+    if (responseOrUser?.access_token) {
+      // Full API response from Login.jsx
+      accessToken  = responseOrUser.access_token
+      refreshToken = responseOrUser.refresh_token
+      userData     = responseOrUser.user
+    } else {
+      // Bare user object fallback
+      userData     = responseOrUser
+      accessToken  = responseOrUser?.access_token
+      refreshToken = responseOrUser?.refresh_token
+    }
+
+    if (accessToken)  localStorage.setItem('access_token', accessToken)
+    if (refreshToken) localStorage.setItem('refresh_token', refreshToken)
     localStorage.setItem('user', JSON.stringify(userData))
-    // Token already stored in hooks.js useLogin, but ensure consistency
-    if (userData.access_token) {
-      localStorage.setItem('access_token', userData.access_token)
-    }
-    if (userData.refresh_token) {
-      localStorage.setItem('refresh_token', userData.refresh_token)
-    }
+    setUser(userData)
   }
 
   const logout = async () => {
     try {
       await api.post('/auth/logout')
     } catch (e) {
-      console.log('Logout error:', e)
+      // Ignore API errors — always clear local state
     } finally {
-      // FIX: Clear only auth data, not everything
       localStorage.removeItem('access_token')
       localStorage.removeItem('refresh_token')
       localStorage.removeItem('user')
-      
       setUser(null)
-      
-      // FIX: Navigate to login after logout
       navigate('/login')
     }
   }
 
-  const isSuperAdmin = user?.role === 'SUPER_ADMIN'
+  const isSuperAdmin    = user?.role === 'SUPER_ADMIN'
   const isHospitalAdmin = user?.role === 'HOSPITAL_ADMIN'
-  const isCoordinator = user?.role === 'COORDINATOR'
-  const isDoctor = user?.role === 'DOCTOR'
-
-  // Helper to check if user has permission
-  const hasRole = (role) => user?.role === role
-  const isLoggedIn = !!user
+  const isCoordinator   = user?.role === 'COORDINATOR'
+  const isDoctor        = user?.role === 'DOCTOR'
+  const hasRole         = (role) => user?.role === role
+  const isLoggedIn      = !!user
 
   return (
-    <AuthContext.Provider value={{ 
-      user, 
-      login, 
-      logout, 
-      loading, 
+    <AuthContext.Provider value={{
+      user,
+      login,
+      logout,
+      loading,
       isLoggedIn,
-      isSuperAdmin, 
-      isHospitalAdmin, 
-      isCoordinator, 
+      isSuperAdmin,
+      isHospitalAdmin,
+      isCoordinator,
       isDoctor,
-      hasRole
+      hasRole,
     }}>
       {children}
     </AuthContext.Provider>
@@ -81,8 +88,6 @@ export const AuthProvider = ({ children }) => {
 
 export const useAuth = () => {
   const context = useContext(AuthContext)
-  if (!context) {
-    throw new Error('useAuth must be used within AuthProvider')
-  }
+  if (!context) throw new Error('useAuth must be used within AuthProvider')
   return context
 }
