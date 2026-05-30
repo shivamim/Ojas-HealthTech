@@ -7,7 +7,7 @@ from sqlalchemy import select, func, text
 from pydantic import BaseModel, EmailStr
 from datetime import datetime, timedelta
 
-from app.core.database import get_db
+from app.core.database import get_db, Base
 from app.core.rbac import Permission, require_permission
 from app.core.encryption import encrypt_field
 from app.models.hospital import Hospital
@@ -159,11 +159,9 @@ async def reset_database(request: Request, db: AsyncSession = Depends(get_db)):
     if request.state.role != "SUPER_ADMIN":
         raise HTTPException(403, "Superadmin only")
     
-    # Only allow with special header
     if request.headers.get("X-Reset-Key") != "ojas-reset-2026":
         raise HTTPException(403, "Reset key required")
     
-    # Drop all tables
     tables = [
         "refresh_tokens", "audit_logs", "timeline_events", 
         "escalations", "checkins", "patients", 
@@ -178,11 +176,9 @@ async def reset_database(request: Request, db: AsyncSession = Depends(get_db)):
     
     await db.commit()
     
-    # Recreate tables
     async with db.begin():
         await db.run_sync(Base.metadata.create_all)
     
-    # Run seed
     from seed_data import seed
     await seed()
     
