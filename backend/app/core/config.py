@@ -1,4 +1,5 @@
 import os
+import secrets
 from pydantic_settings import BaseSettings
 from dotenv import load_dotenv
 
@@ -18,13 +19,27 @@ class Settings(BaseSettings):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        # Validate critical settings in production
-        if not self.SECRET_KEY or len(self.SECRET_KEY) < 32:
-            import warnings
-            warnings.warn("SECRET_KEY is not set or too short. Use a strong 32+ character key in production.")
         
-        if not self.ENCRYPTION_KEY or len(self.ENCRYPTION_KEY) != 32:
+        # Auto-generate SECRET_KEY for dev (NOT production)
+        if not self.SECRET_KEY:
             import warnings
-            warnings.warn("ENCRYPTION_KEY must be exactly 32 characters in production.")
+            self.SECRET_KEY = secrets.token_urlsafe(32)
+            warnings.warn("SECRET_KEY auto-generated. Set a fixed key in production!")
+        
+        if len(self.SECRET_KEY) < 32:
+            import warnings
+            warnings.warn("SECRET_KEY is too short. Use a strong 32+ character key in production.")
+        
+        # ENCRYPTION_KEY must be exactly 32 chars
+        if not self.ENCRYPTION_KEY:
+            import warnings
+            self.ENCRYPTION_KEY = secrets.token_hex(16)  # 32 hex chars
+            warnings.warn("ENCRYPTION_KEY auto-generated. Set a fixed 32-char key in production!")
+        
+        if len(self.ENCRYPTION_KEY) != 32:
+            import warnings
+            # Pad or truncate to 32 chars
+            self.ENCRYPTION_KEY = (self.ENCRYPTION_KEY + "0" * 32)[:32]
+            warnings.warn("ENCRYPTION_KEY must be exactly 32 characters. Adjusted for dev.")
 
 settings = Settings()
