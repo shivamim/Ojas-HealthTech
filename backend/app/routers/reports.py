@@ -6,7 +6,7 @@ from datetime import datetime, date, timezone
 
 from app.core.database import get_db
 from app.core.tenant import require_tenant
-from app.core.rbac import Permission, require_permission
+from app.core.rbac import Permission, require_permission, get_current_user, CurrentUser
 from app.models.patient import Patient
 from app.models.checkin import CheckIn
 from app.models.hospital import Hospital
@@ -19,19 +19,18 @@ router = APIRouter(prefix="/reports", tags=["Reports"])
 @require_permission(Permission.REPORT_GENERATE)
 async def generate_nabh_report_endpoint(
     request: Request, 
-    db: AsyncSession = Depends(get_db), 
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user),
     start_date: date = None, 
     end_date: date = None,
-    hospital_id: str = None  # Optional: Super Admin can specify any hospital
+    hospital_id: str = None
 ):
-    # FIX 1: Get hospital_id from tenant OR query param
-    tenant_id = require_tenant(request)
+    tenant_id = current_user.require_hospital()
     effective_hospital_id = hospital_id or tenant_id
     
     if not effective_hospital_id:
         raise HTTPException(403, "Hospital ID required for report generation")
     
-    # FIX 2: uuid imported, safe conversion
     result = await db.execute(
         select(Hospital).where(Hospital.id == uuid.UUID(effective_hospital_id))
     )
@@ -67,13 +66,12 @@ async def generate_nabh_report_endpoint(
         "feedback_count": int(total * 0.78)
     }
 
-    # FIX 3: timezone-aware datetime
     pdf_buffer, report_hash = await generate_nabh_report(
         hospital.name,
         start_date.isoformat() if start_date else "2026-01-01",
         end_date.isoformat() if end_date else datetime.now(timezone.utc).strftime("%Y-%m-%d"),
         stats,
-        request.state.user_id or "system"
+        current_user.user_id or "system"
     )
 
     from fastapi.responses import StreamingResponse
