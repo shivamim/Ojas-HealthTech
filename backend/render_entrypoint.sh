@@ -3,6 +3,24 @@ set -e
 
 cd backend || exit 1
 
+echo "=== Checking database connection ==="
+python -c "
+import asyncio
+from app.core.database import engine
+from sqlalchemy import text
+
+async def check_db():
+    try:
+        async with engine.begin() as conn:
+            result = await conn.execute(text('SELECT 1'))
+            print('Database connected successfully')
+    except Exception as e:
+        print(f'Database connection failed: {e}')
+        exit(1)
+
+asyncio.run(check_db())
+"
+
 echo "=== Checking if tables exist ==="
 python -c "
 import asyncio
@@ -41,10 +59,11 @@ async def check_seed():
             print('Seed data already exists, skipping')
         else:
             print('No seed data found, will seed')
-            exit(1)  # Exit with error to trigger seeding
+            exit(1)
 
 asyncio.run(check_seed())
 " || python seed_data.py
 
 echo "=== Starting server ==="
-exec uvicorn app.main:app --host 0.0.0.0 --port $PORT
+# FIX: Default port 8000 if $PORT not set (for local testing)
+exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1
