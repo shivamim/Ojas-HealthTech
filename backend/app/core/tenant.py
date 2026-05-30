@@ -5,21 +5,31 @@ async def tenant_middleware(request: Request, call_next):
     request.state.hospital_id = None
     request.state.role = None
     request.state.user_id = None
+    request.state.email = None  # Added
 
     auth = request.headers.get("authorization", "")
     if auth.startswith("Bearer "):
         payload = decode_token(auth.replace("Bearer ", ""))
         if payload:
             request.state.user_id = payload.get("user_id")
+            request.state.email = payload.get("email")  # Added
             request.state.hospital_id = payload.get("hospital_id")
             request.state.role = payload.get("role")
 
     response = await call_next(request)
     return response
 
+
 def require_tenant(request: Request):
     if request.state.role == "SUPER_ADMIN":
-        return None  # Super Admin can access all hospitals
+        return None
     if not request.state.hospital_id:
         raise HTTPException(403, "Hospital context required")
     return request.state.hospital_id
+
+
+def require_auth(request: Request):
+    """Verify user is authenticated"""
+    if not request.state.user_id:
+        raise HTTPException(401, "Authentication required")
+    return request.state.user_id
