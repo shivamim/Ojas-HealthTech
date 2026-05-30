@@ -1,29 +1,44 @@
+import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.core.database import get_db
 from app.core.tenant import require_tenant
+from app.core.encryption import decrypt_field
 from app.models.patient import Patient
 from app.models.whatsapp_log import WhatsAppMessageLog
 from app.services.whatsapp import send_whatsapp_message
 
 router = APIRouter(prefix="/whatsapp", tags=["WhatsApp"])
 
+
 @router.post("/send-checkin/{patient_id}/{day}")
-async def send_checkin(patient_id: str, day: int, request: Request, db: AsyncSession = Depends(get_db)):
+async def send_checkin(
+    patient_id: str, 
+    day: int, 
+    request: Request, 
+    db: AsyncSession = Depends(get_db)
+):
     hospital_id = require_tenant(request)
 
-    result = await db.execute(select(Patient).where(Patient.id == __import__('uuid').UUID(patient_id), Patient.hospital_id == __import__('uuid').UUID(hospital_id)))
+    # FIX: Build query dynamically based on hospital_id
+    query = select(Patient).where(Patient.id == uuid.UUID(patient_id))
+    if hospital_id:
+        query = query.where(Patient.hospital_id == uuid.UUID(hospital_id))
+    
+    result = await db.execute(query)
     p = result.scalar_one_or_none()
     if not p:
         raise HTTPException(404, "Patient not found")
 
-    from app.core.encryption import decrypt_field
     mobile = decrypt_field(p.mobile)
     name = decrypt_field(p.full_name)
 
-    message = f"Day {day} Check-in: Hi {name}, how are you feeling today? Please reply with your pain level (0-4) and if you have fever, swelling, or bleeding."
+    message = (
+        f"Day {day} Check-in: Hi {name}, how are you feeling today? "
+        "Please reply with your pain level (0-4) and if you have fever, swelling, or bleeding."
+    )
 
     # Log
     log = WhatsAppMessageLog(
@@ -39,11 +54,31 @@ async def send_checkin(patient_id: str, day: int, request: Request, db: AsyncSes
 
     return {"message": "Check-in sent", "whatsapp_response": resp}
 
+
 @router.get("/status/{patient_id}")
-async def get_whatsapp_status(patient_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+async def get_whatsapp_status(
+    patient_id: str, 
+    request: Request, 
+    db: AsyncSession = Depends(get_db)
+):
     hospital_id = require_tenant(request)
 
-    result = await db.execute(select(WhatsAppMessageLog).where(WhatsAppMessageLog.patient_id == __import__('uuid').UUID(patient_id)).order_by(WhatsAppMessageLog.sent_at.desc()))
+    # FIX: Verify patient belongs to hospital (skip for Super Admin)
+    if hospital_id:
+        patient_check = await db.execute(
+            select(Patient).where(
+                Patient.id == uuid.UUID(patient_id),
+                Patient.hospital_id == uuid.UUID(hospital_id)
+            )
+        )
+        if not patient_check.scalar_one_or_none():
+            raise HTTPException(403, "Not authorized to view this patient")
+
+    result = await db.execute(
+        select(WhatsAppMessageLog)
+        .where(WhatsAppMessageLog.patient_id == uuid.UUID(patient_id))
+        .order_by(WhatsAppMessageLog.sent_at.desc())
+    )
     logs = result.scalars().all()
 
     return [{
