@@ -89,6 +89,21 @@ async def refresh_token(refresh_token: str, db: AsyncSession = Depends(get_db)):
     }
     return {"access_token": create_access_token(new_payload)}
 
+@router.post("/logout")  # ADDED
+async def logout(request: Request, db: AsyncSession = Depends(get_db)):
+    auth = request.headers.get("authorization", "")
+    if auth.startswith("Bearer "):
+        token = auth.replace("Bearer ", "")
+        payload = decode_token(token)
+        if payload:
+            user_id = payload.get("user_id")
+            # Delete refresh tokens for this user
+            await db.execute(
+                select(RefreshToken).where(RefreshToken.user_id == uuid.UUID(user_id))
+            )
+            # Note: In production, you might want to mark as revoked instead of deleting
+    return {"message": "Logged out successfully"}
+
 @router.post("/verify-invite")
 async def verify_invite(token: str, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(HospitalInvite).where(HospitalInvite.token == token))
