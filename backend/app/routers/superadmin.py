@@ -5,10 +5,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, text
 from pydantic import BaseModel, EmailStr
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from app.core.database import get_db, engine, Base
-from app.core.rbac import Permission, require_permission
+from app.core.rbac import require_superadmin, get_current_user, CurrentUser
 from app.core.encryption import encrypt_field
 from app.models.hospital import Hospital
 from app.models.user import User
@@ -20,13 +20,13 @@ router = APIRouter(prefix="/superadmin", tags=["SuperAdmin"])
 
 
 class HospitalCreate(BaseModel):
-    name: str
-    city: str
-    state: str
-    bed_count: int = 100
+    name: str = Field(..., min_length=2, max_length=200)
+    city: str = Field(..., min_length=1)
+    state: str = Field(..., min_length=1)
+    bed_count: int = Field(100, ge=1)
     nabh_level: str = "Entry Level"
     contact_email: EmailStr
-    contact_phone: str
+    contact_phone: str = Field(..., min_length=5)
 
 
 class InviteCreate(BaseModel):
@@ -35,15 +35,16 @@ class InviteCreate(BaseModel):
 
 
 @router.post("/hospitals")
-@require_permission(Permission.HOSPITAL_MANAGE)
-async def create_hospital(req: HospitalCreate, request: Request, db: AsyncSession = Depends(get_db)):
-    if request.state.role != "SUPER_ADMIN":
-        raise HTTPException(403, "Superadmin only")
-
+async def create_hospital(
+    req: HospitalCreate, 
+    request: Request, 
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_superadmin)
+):
     hospital = Hospital(
-        name=req.name,
-        city=req.city,
-        state=req.state,
+        name=req.name.strip(),
+        city=req.city.strip(),
+        state=req.state.strip(),
         bed_count=req.bed_count,
         nabh_level=req.nabh_level,
         contact_email=encrypt_field(req.contact_email),
@@ -56,17 +57,19 @@ async def create_hospital(req: HospitalCreate, request: Request, db: AsyncSessio
 
 
 @router.get("/hospitals")
-@require_permission(Permission.HOSPITAL_MANAGE)
-async def list_hospitals(request: Request, db: AsyncSession = Depends(get_db)):
-    if request.state.role != "SUPER_ADMIN":
-        raise HTTPException(403, "Superadmin only")
-
+async def list_hospitals(
+    request: Request, 
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_superadmin)
+):
     result = await db.execute(select(Hospital).where(Hospital.is_active == True))
     hospitals = result.scalars().all()
 
     data = []
     for h in hospitals:
-        patient_count = await db.execute(select(func.count()).select_from(Patient).where(Patient.hospital_id == h.id))
+        patient_count = await db.execute(
+            select(func.count()).select_from(Patient).where(Patient.hospital_id == h.id)
+        )
         data.append({
             "id": str(h.id),
             "name": h.name,
@@ -82,18 +85,23 @@ async def list_hospitals(request: Request, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/hospitals/{hospital_id}")
-@require_permission(Permission.HOSPITAL_MANAGE)
-async def get_hospital(hospital_id: str, request: Request, db: AsyncSession = Depends(get_db)):
-    if request.state.role != "SUPER_ADMIN":
-        raise HTTPException(403, "Superadmin only")
-
+async def get_hospital(
+    hospital_id: str, 
+    request: Request, 
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_superadmin)
+):
     result = await db.execute(select(Hospital).where(Hospital.id == uuid.UUID(hospital_id)))
     h = result.scalar_one_or_none()
     if not h:
         raise HTTPException(404, "Hospital not found")
 
-    patient_count = await db.execute(select(func.count()).select_from(Patient).where(Patient.hospital_id == h.id))
-    user_count = await db.execute(select(func.count()).select_from(User).where(User.hospital_id == h.id))
+    patient_count = await db.execute(
+        select(func.count()).select_from(Patient).where(Patient.hospital_id == h.id)
+    )
+    user_count = await db.execute(
+        select(func.count()).select_from(User).where(User.hospital_id == h.id)
+    )
 
     return {
         "id": str(h.id),
@@ -104,24 +112,31 @@ async def get_hospital(hospital_id: str, request: Request, db: AsyncSession = De
         "nabh_level": h.nabh_level,
         "patient_count": patient_count.scalar(),
         "user_count": user_count.scalar(),
-        "settings": h.settings
+        "settings": h.settings or {}
     }
 
 
 @router.post("/hospitals/{hospital_id}/invite")
-@require_permission(Permission.HOSPITAL_MANAGE)
-async def invite_user(hospital_id: str, req: InviteCreate, request: Request, db: AsyncSession = Depends(get_db)):
-    if request.state.role != "SUPER_ADMIN":
-        raise HTTPException(403, "Superadmin only")
-
+async def invite_user(
+    hospital_id: str, 
+    req: InviteCreate, 
+    request: Request, 
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_superadmin)
+):
+    # Verify hospital exists
+    h_result = await db.execute(select(Hospital).where(Hospital.id == uuid.UUID(hospital_id)))
+    if not h_result.scalar_one_or_none():
+        raise HTTPException(404, "Hospital not found")
+    
     token = secrets.token_urlsafe(32)
     invite = HospitalInvite(
         hospital_id=uuid.UUID(hospital_id),
         email=req.email,
         role=req.role,
         token=token,
-        expires_at=datetime.utcnow() + timedelta(hours=48),
-        created_by=uuid.UUID(request.state.user_id) if request.state.user_id else None
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=48),
+        created_by=uuid.UUID(current_user.user_id)
     )
     db.add(invite)
     await db.commit()
@@ -134,12 +149,15 @@ async def invite_user(hospital_id: str, req: InviteCreate, request: Request, db:
 
 
 @router.get("/audit-logs")
-@require_permission(Permission.HOSPITAL_MANAGE)
-async def get_audit_logs(request: Request, db: AsyncSession = Depends(get_db), limit: int = 100):
-    if request.state.role != "SUPER_ADMIN":
-        raise HTTPException(403, "Superadmin only")
-
-    result = await db.execute(select(AuditLog).order_by(AuditLog.timestamp.desc()).limit(limit))
+async def get_audit_logs(
+    request: Request, 
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_superadmin),
+    limit: int = 100
+):
+    result = await db.execute(
+        select(AuditLog).order_by(AuditLog.timestamp.desc()).limit(limit)
+    )
     logs = result.scalars().all()
     return [{
         "id": str(l.id),
@@ -154,13 +172,17 @@ async def get_audit_logs(request: Request, db: AsyncSession = Depends(get_db), l
 
 
 @router.post("/reset-database")
-@require_permission(Permission.HOSPITAL_MANAGE)
-async def reset_database(request: Request, db: AsyncSession = Depends(get_db)):
-    if request.state.role != "SUPER_ADMIN":
-        raise HTTPException(403, "Superadmin only")
+async def reset_database(
+    request: Request, 
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(require_superadmin)
+):
+    reset_key = os.getenv("RESET_KEY")
+    if not reset_key:
+        raise HTTPException(500, "RESET_KEY not configured")
     
-    if request.headers.get("X-Reset-Key") != "ojas-reset-2026":
-        raise HTTPException(403, "Reset key required")
+    if request.headers.get("X-Reset-Key") != reset_key:
+        raise HTTPException(403, "Invalid reset key")
     
     tables = [
         "refresh_tokens", "audit_logs", "timeline_events", 
@@ -171,17 +193,15 @@ async def reset_database(request: Request, db: AsyncSession = Depends(get_db)):
     for table in tables:
         try:
             await db.execute(text(f"DROP TABLE IF EXISTS {table} CASCADE"))
-        except:
+        except Exception:
             pass
     
     await db.commit()
     
-    # FIX: Use engine.begin() instead of db.begin()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     
-    # Run seed
     from seed_data import seed
-    await seed()
+    await seed(db)
     
     return {"message": "Database reset and seeded successfully"}
