@@ -6,7 +6,7 @@ from sqlalchemy import select
 from app.core.database import get_db
 from app.core.tenant import require_tenant
 from app.core.encryption import decrypt_field
-from app.core.rbac import get_current_user, CurrentUser
+from app.core.rbac import Permission, require_permission, get_current_user, CurrentUser
 from app.models.patient import Patient
 from app.models.whatsapp_log import WhatsAppMessageLog
 from app.services.whatsapp import send_whatsapp_message
@@ -20,7 +20,7 @@ async def send_checkin(
     day: int, 
     request: Request, 
     db: AsyncSession = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: CurrentUser = Depends(require_permission(Permission.PATIENT_UPDATE))
 ):
     hospital_id = current_user.require_hospital()
 
@@ -49,7 +49,6 @@ async def send_checkin(
     db.add(log)
     await db.commit()
 
-    # Send (simulated if no API key)
     try:
         resp = await send_whatsapp_message(mobile, message)
     except Exception as e:
@@ -64,7 +63,7 @@ async def get_whatsapp_status(
     patient_id: str, 
     request: Request, 
     db: AsyncSession = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user)
+    current_user: CurrentUser = Depends(require_permission(Permission.PATIENT_READ))
 ):
     hospital_id = current_user.require_hospital()
 
