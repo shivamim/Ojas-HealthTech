@@ -9,7 +9,6 @@ from app.routers import auth, superadmin, hospitals, patients, escalations, repo
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Check if tables exist
     async with engine.begin() as conn:
         def check_tables(sync_conn):
             inspector = inspect(sync_conn)
@@ -23,7 +22,6 @@ async def lifespan(app: FastAPI):
         else:
             print("Tables already exist")
     
-    # Seed data (outside engine.begin() to avoid nested async issues)
     if 'users' not in tables:
         print("Running seed data...")
         async with AsyncSessionLocal() as seed_db:
@@ -43,7 +41,7 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS
+# CORS — MUST BE FIRST (before tenant middleware)
 origins_raw = os.getenv("FRONTEND_URL", "http://localhost:5173")
 origins = [o.strip() for o in origins_raw.split(",") if o.strip()]
 
@@ -52,10 +50,10 @@ app.add_middleware(
     allow_origins=origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
+    allow_headers=["Authorization", "Content-Type", "X-Requested-With", "X-Reset-Key"],
 )
 
-# Tenant middleware
+# Tenant middleware — AFTER CORS
 @app.middleware("http")
 async def tenant_mw(request, call_next):
     return await tenant_middleware(request, call_next)
