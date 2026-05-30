@@ -1,22 +1,43 @@
 import os
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import inspect
+from sqlalchemy import inspect, text
 from app.core.database import engine, Base
 from app.core.tenant import tenant_middleware
 from app.routers import auth, superadmin, hospitals, patients, escalations, reports, whatsapp
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    async with engine.begin() as conn:
+        def check_tables(sync_conn):
+            inspector = inspect(sync_conn)
+            return inspector.get_table_names()
+        tables = await conn.run_sync(check_tables)
+        if 'users' not in tables:
+            await conn.run_sync(Base.metadata.create_all)
+            print("Database initialized — tables created")
+            # Auto-seed on first run
+            from seed_data import seed
+            await seed()
+            print("Seed data loaded")
+        else:
+            print("Database initialized — tables already exist")
+    yield
+    await engine.dispose()
 
 app = FastAPI(
     title="Ojas V3 — Post-Discharge Recovery Monitoring",
     description="NABH-Compliant | AI-Powered | Multi-Tenant",
     version="3.0.0",
     docs_url="/docs",
-    openapi_url="/openapi.json"
+    openapi_url="/openapi.json",
+    lifespan=lifespan
 )
 
 # CORS — restrict in production via env
 origins_raw = os.getenv("FRONTEND_URL", "http://localhost:5173")
-origins = [o.strip() for o in origins_raw.split(",") if o.strip()]  # FIX: Filter empty strings
+origins = [o.strip() for o in origins_raw.split(",") if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,
@@ -40,27 +61,9 @@ app.include_router(escalations.router, prefix="/api/v1")
 app.include_router(reports.router, prefix="/api/v1")
 app.include_router(whatsapp.router, prefix="/api/v1")
 
-
-@app.on_event("startup")
-async def startup():
-    # FIX: Check if tables exist before creating (prevents race condition)
-    async with engine.begin() as conn:
-        def check_tables(sync_conn):
-            inspector = inspect(sync_conn)
-            return inspector.get_table_names()
-        
-        tables = await conn.run_sync(check_tables)
-        if 'users' not in tables:
-            await conn.run_sync(Base.metadata.create_all)
-            print("Database initialized — tables created")
-        else:
-            print("Database initialized — tables already exist")
-
-
 @app.get("/")
 async def root():
     return {"name": "Ojas V3 API", "status": "running", "docs": "/docs"}
-
 
 @app.get("/health")
 async def health():
