@@ -6,6 +6,7 @@ from sqlalchemy import select
 from app.core.database import get_db
 from app.core.tenant import require_tenant
 from app.core.encryption import decrypt_field
+from app.core.rbac import get_current_user, CurrentUser
 from app.models.patient import Patient
 from app.models.whatsapp_log import WhatsAppMessageLog
 from app.services.whatsapp import send_whatsapp_message
@@ -18,11 +19,11 @@ async def send_checkin(
     patient_id: str, 
     day: int, 
     request: Request, 
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user)
 ):
-    hospital_id = require_tenant(request)
+    hospital_id = current_user.require_hospital()
 
-    # FIX: Build query dynamically based on hospital_id
     query = select(Patient).where(Patient.id == uuid.UUID(patient_id))
     if hospital_id:
         query = query.where(Patient.hospital_id == uuid.UUID(hospital_id))
@@ -40,7 +41,6 @@ async def send_checkin(
         "Please reply with your pain level (0-4) and if you have fever, swelling, or bleeding."
     )
 
-    # Log
     log = WhatsAppMessageLog(
         patient_id=p.id,
         message_type=f"day_{day}_checkin",
@@ -50,7 +50,11 @@ async def send_checkin(
     await db.commit()
 
     # Send (simulated if no API key)
-    resp = await send_whatsapp_message(mobile, message)
+    try:
+        resp = await send_whatsapp_message(mobile, message)
+    except Exception as e:
+        print(f"WhatsApp send failed: {e}")
+        resp = {"error": str(e), "status": "failed"}
 
     return {"message": "Check-in sent", "whatsapp_response": resp}
 
@@ -59,11 +63,11 @@ async def send_checkin(
 async def get_whatsapp_status(
     patient_id: str, 
     request: Request, 
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(get_current_user)
 ):
-    hospital_id = require_tenant(request)
+    hospital_id = current_user.require_hospital()
 
-    # FIX: Verify patient belongs to hospital (skip for Super Admin)
     if hospital_id:
         patient_check = await db.execute(
             select(Patient).where(
