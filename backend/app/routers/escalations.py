@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.core.database import get_db
 from app.core.tenant import require_tenant
@@ -15,8 +15,10 @@ from app.services.coach_suggestions import get_suggestions
 
 router = APIRouter(prefix="/escalations", tags=["Escalations"])
 
+
 class ResolveRequest(BaseModel):
     resolution_note: str
+
 
 @router.get("")
 @require_permission(Permission.PATIENT_READ)
@@ -52,6 +54,7 @@ async def list_escalations(request: Request, db: AsyncSession = Depends(get_db),
         })
     return data
 
+
 @router.post("/{escalation_id}/resolve")
 @require_permission(Permission.PATIENT_UPDATE)
 async def resolve_escalation(escalation_id: str, req: ResolveRequest, request: Request, db: AsyncSession = Depends(get_db)):
@@ -63,8 +66,14 @@ async def resolve_escalation(escalation_id: str, req: ResolveRequest, request: R
         raise HTTPException(404, "Escalation not found")
 
     # FIX: Verify patient belongs to hospital (skip for Super Admin)
+    p = None
     if hospital_id:
-        patient_result = await db.execute(select(Patient).where(Patient.id == e.patient_id, Patient.hospital_id == uuid.UUID(hospital_id)))
+        patient_result = await db.execute(
+            select(Patient).where(
+                Patient.id == e.patient_id, 
+                Patient.hospital_id == uuid.UUID(hospital_id)
+            )
+        )
         p = patient_result.scalar_one_or_none()
         if not p:
             raise HTTPException(403, "Not authorized")
@@ -73,14 +82,24 @@ async def resolve_escalation(escalation_id: str, req: ResolveRequest, request: R
         patient_result = await db.execute(select(Patient).where(Patient.id == e.patient_id))
         p = patient_result.scalar_one_or_none()
 
+    # FIX: Patient must exist before accessing p.current_day
+    if not p:
+        raise HTTPException(404, "Patient not found for this escalation")
+
     e.status = "RESOLVED"
     e.resolution_note = req.resolution_note
-    e.resolved_at = datetime.utcnow()
+    e.resolved_at = datetime.now(timezone.utc)  # FIX: timezone-aware
     e.resolved_by = uuid.UUID(request.state.user_id) if request.state.user_id else None
 
-    # Update patient status if no more open escalations
-    open_count_result = await db.execute(select(Escalation).where(Escalation.patient_id == e.patient_id, Escalation.status == "OPEN"))
-    if len(open_count_result.scalars().all()) == 0:
+    # FIX: Proper async count check
+    open_count_result = await db.execute(
+        select(Escalation).where(
+            Escalation.patient_id == e.patient_id, 
+            Escalation.status == "OPEN"
+        )
+    )
+    open_escalations = open_count_result.scalars().all()
+    if len(open_escalations) == 0:
         p.status = "ACTIVE"
 
     event = TimelineEvent(
@@ -88,7 +107,7 @@ async def resolve_escalation(escalation_id: str, req: ResolveRequest, request: R
         event_type="HUMAN_ACTION",
         title="Escalation Resolved",
         description=req.resolution_note,
-        day_number=p.current_day
+        day_number=p.current_day if p else 0  # FIX: Safe access
     )
     db.add(event)
 
