@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { NavLink, useLocation, useNavigate } from 'react-router-dom'  // ADD useNavigate
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { usePermission } from '../../hooks/usePermission'
 import {
@@ -12,9 +12,9 @@ const Sidebar = () => {
   const { user, logout, isSuperAdmin, isHospitalAdmin, isCoordinator, isDoctor } = useAuth()
   const { can } = usePermission()
   const location = useLocation()
-  const navigate = useNavigate()  // ADD THIS
+  const navigate = useNavigate()
 
-  const handleLogout = async () => {  // ADD THIS FUNCTION
+  const handleLogout = async () => {
     await logout()
     navigate('/login')
   }
@@ -100,7 +100,7 @@ const Sidebar = () => {
           </span>
         </div>
         <button
-          onClick={handleLogout}  // CHANGED: handleLogout instead of logout
+          onClick={handleLogout}
           className="flex items-center gap-2 w-full px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
         >
           <LogOut size={16} />
