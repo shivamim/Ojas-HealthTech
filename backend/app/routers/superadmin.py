@@ -7,7 +7,7 @@ from sqlalchemy import select, func, text
 from pydantic import BaseModel, EmailStr
 from datetime import datetime, timedelta
 
-from app.core.database import get_db, Base
+from app.core.database import get_db, engine, Base
 from app.core.rbac import Permission, require_permission
 from app.core.encryption import encrypt_field
 from app.models.hospital import Hospital
@@ -176,9 +176,11 @@ async def reset_database(request: Request, db: AsyncSession = Depends(get_db)):
     
     await db.commit()
     
-    async with db.begin():
-        await db.run_sync(Base.metadata.create_all)
+    # FIX: Use engine.begin() instead of db.begin()
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
     
+    # Run seed
     from seed_data import seed
     await seed()
     
