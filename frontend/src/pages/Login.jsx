@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useLogin } from '../api/hooks'
+import { useAuth } from '../context/AuthContext'   // ← ADDED
 import { Stethoscope, Eye, EyeOff } from 'lucide-react'
 
 const Login = () => {
@@ -10,12 +11,14 @@ const Login = () => {
   const [error, setError] = useState('')
   const navigate = useNavigate()
   const loginMutation = useLogin()
+  const { login } = useAuth()                          // ← ADDED
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
     try {
-      await loginMutation.mutateAsync({ email, password })
+      const data = await loginMutation.mutateAsync({ email, password })
+      login(data)                                       // ← ADDED: updates AuthContext instantly
       navigate('/dashboard')
     } catch (err) {
       setError(err.response?.data?.detail || 'Invalid credentials. Please try again.')
