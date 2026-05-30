@@ -1,9 +1,8 @@
 import uuid
 from sqlalchemy import Column, String, DateTime, ForeignKey
-from sqlalchemy import String
 from sqlalchemy.dialects.postgresql import UUID
 from app.core.database import Base
-from datetime import datetime
+from datetime import datetime, timezone
 
 class HospitalInvite(Base):
     __tablename__ = "hospital_invites"
@@ -16,4 +15,4 @@ class HospitalInvite(Base):
     expires_at = Column(DateTime)
     used_at = Column(DateTime, nullable=True)
     created_by = Column(UUID(as_uuid=True), ForeignKey("users.id"))
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
