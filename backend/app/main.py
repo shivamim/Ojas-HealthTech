@@ -1,6 +1,7 @@
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import inspect
 from app.core.database import engine, Base
 from app.core.tenant import tenant_middleware
 from app.routers import auth, superadmin, hospitals, patients, escalations, reports, whatsapp
@@ -14,7 +15,9 @@ app = FastAPI(
 )
 
 # CORS — restrict in production via env
-origins = os.getenv("FRONTEND_URL", "http://localhost:5173").split(",")
+origins_raw = os.getenv("FRONTEND_URL", "http://localhost:5173")
+origins = [o.strip() for o in origins_raw.split(",") if o.strip()]  # FIX: Filter empty strings
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -37,15 +40,27 @@ app.include_router(escalations.router, prefix="/api/v1")
 app.include_router(reports.router, prefix="/api/v1")
 app.include_router(whatsapp.router, prefix="/api/v1")
 
+
 @app.on_event("startup")
 async def startup():
+    # FIX: Check if tables exist before creating (prevents race condition)
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    print("Database initialized")
+        def check_tables(sync_conn):
+            inspector = inspect(sync_conn)
+            return inspector.get_table_names()
+        
+        tables = await conn.run_sync(check_tables)
+        if 'users' not in tables:
+            await conn.run_sync(Base.metadata.create_all)
+            print("Database initialized — tables created")
+        else:
+            print("Database initialized — tables already exist")
+
 
 @app.get("/")
 async def root():
     return {"name": "Ojas V3 API", "status": "running", "docs": "/docs"}
+
 
 @app.get("/health")
 async def health():
