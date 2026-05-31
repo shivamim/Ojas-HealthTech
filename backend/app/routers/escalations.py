@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from pydantic import BaseModel, Field
-from datetime import datetime, timezone
+from datetime import datetime
 
 from app.core.database import get_db
 from app.core.tenant import require_tenant
@@ -87,7 +87,7 @@ async def resolve_escalation(
 
     e.status = "RESOLVED"
     e.resolution_note = req.resolution_note
-    e.resolved_at = datetime.now(timezone.utc)
+    e.resolved_at = datetime.utcnow()
     e.resolved_by = uuid.UUID(current_user.user_id)
 
     open_count_result = await db.execute(
