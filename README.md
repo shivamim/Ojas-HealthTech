@@ -1,7 +1,6 @@
 <div align="center">
 
-<!-- Header Banner -->
-<img width="100%" src="https://capsule-render.vercel.app/api?type=waving&color=0:06b6d4,50:0891b2,100:0e7490&height=200&section=header&text=Ojas%20HealthTech%20V3&fontSize=52&fontColor=ffffff&fontAlignY=38&desc=NABH-Compliant%20%7C%20AI-Powered%20%7C%20Multi-Tenant%20Post-Discharge%20Recovery%20Monitoring&descAlignY=60&descSize=16&animation=fadeIn"/>
+<img width="100%" src="https://capsule-render.vercel.app/api?type=waving&color=0:0f766e,50:0d9488,100:14b8a6&height=200&section=header&text=Ojas%20HealthTech&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=NABH-Compliant%20Post-Discharge%20Patient%20Recovery%20Monitoring&descAlignY=60&descSize=17&animation=fadeIn"/>
 
 <br/>
 
@@ -14,11 +13,11 @@
 
 <br/>
 
-> **Ojas HealthTech** is a production-grade healthcare platform that enables hospitals to monitor patients after discharge through automated WhatsApp check-ins, AI-driven risk scoring, and NABH-compliant reporting. Built for Indian healthcare standards with field-level AES-256 encryption, role-based access control, and comprehensive audit trails.
+> **Ojas HealthTech** enables hospitals to monitor patients after discharge through automated WhatsApp check-ins, AI-driven risk scoring, and NABH-compliant reporting — built for Indian healthcare standards with enterprise-grade security.
 
 <br/>
 
-[📖 Documentation](https://docs.ojas.care) · [📊 Status](https://status.ojas.care) · [✉️ Support](mailto:shivam.shukla1688@gmail.com) · [🐛 Report Bug](https://github.com/your-org/ojas-healthtech/issues)
+[📖 Documentation](https://docs.ojas.care) · [📊 Status](https://status.ojas.care) · [✉️ Contact](mailto:shivam.shukla1688@gmail.com) · [🐛 Report Bug](https://github.com/your-org/ojas-healthtech/issues)
 
 </div>
 
@@ -29,10 +28,9 @@
 - [✨ Features](#-features)
 - [🏗️ Architecture](#️-architecture)
 - [🚀 Quick Start](#-quick-start)
-- [⚙️ Environment Variables](#️-environment-variables)
-- [👤 Demo Credentials](#-demo-credentials)
-- [📡 API Endpoints](#-api-endpoints)
-- [🔒 Security Model](#-security-model)
+- [⚙️ Configuration](#️-configuration)
+- [📡 API Reference](#-api-reference)
+- [🔒 Security](#-security)
 - [🧪 Testing](#-testing)
 - [☁️ Deployment](#️-deployment)
 - [📁 Project Structure](#-project-structure)
@@ -52,12 +50,12 @@
 | Feature | Details |
 |---|---|
 | **NABH Compliance** | Automated COP 7.3, 7.3.1, 7.4, 5.6 reporting |
-| **AES-256 Encryption** | Patient PII encrypted at rest via Fernet (PBKDF2HMAC) |
-| **JWT Authentication** | 15-min access + 7-day refresh tokens with secure rotation |
-| **RBAC** | `SUPER_ADMIN` → `HOSPITAL_ADMIN` → `COORDINATOR` → `DOCTOR` |
-| **Multi-Tenant Isolation** | Hospital-level data segregation with auto tenant scoping |
-| **Audit Logging** | IP, user agent, timestamp, and success status on every action |
-| **Rate Limiting** | Configurable per-endpoint limits via SlowAPI |
+| **Field Encryption** | Patient PII encrypted at rest (AES-256 / PBKDF2HMAC) |
+| **JWT Auth** | Short-lived access tokens with secure refresh rotation |
+| **RBAC** | 4-tier role hierarchy with granular permission guards |
+| **Multi-Tenant** | Hospital-level data isolation with auto tenant scoping |
+| **Audit Logging** | IP, user agent, timestamp on every privileged action |
+| **Rate Limiting** | Configurable per-endpoint throttling |
 
 </td>
 <td width="50%">
@@ -67,10 +65,10 @@
 | Feature | Details |
 |---|---|
 | **Heuristic Risk Scoring** | Real-time pain, fever, swelling, bleeding detection |
-| **Readmission Risk Prediction** | Age, surgery type, response rate, missed check-ins |
-| **AI Coach Suggestions** | Context-aware action recommendations per escalation |
-| **WhatsApp Automation** | 360dialog API with simulated fallback mode |
-| **14-Day Check-in Protocol** | Automated daily monitoring + family nudges |
+| **Readmission Prediction** | Age, surgery type, response rate, missed check-ins |
+| **AI Coach Suggestions** | Context-aware recommended actions per escalation |
+| **WhatsApp Automation** | 360dialog API with graceful simulation fallback |
+| **14-Day Protocol** | Automated daily check-ins + family contact nudges |
 
 </td>
 </tr>
@@ -81,10 +79,10 @@
 
 | Feature | Details |
 |---|---|
-| **Risk Distribution Charts** | Recharts-powered visual analytics |
-| **Escalation Triage Board** | Kanban-style `OPEN` → `RESOLVED` workflow |
-| **Patient Timeline** | Complete activity history enrollment to resolution |
-| **Response Rate Tracking** | Per-patient and aggregate engagement metrics |
+| **Risk Distribution** | Visual analytics across your patient cohort |
+| **Escalation Board** | Kanban-style `OPEN → RESOLVED` triage workflow |
+| **Patient Timeline** | Full activity history from enrollment to discharge |
+| **Response Tracking** | Per-patient and aggregate engagement metrics |
 | **NABH PDF Reports** | One-click compliance report generation |
 
 </td>
@@ -94,11 +92,11 @@
 
 | Feature | Details |
 |---|---|
-| **Responsive Design** | Full mobile support for ward rounds & field coordinators |
-| **Dark-Ready UI** | Tailwind CSS with Ojas design system |
-| **Auto Token Refresh** | Transparent 401 handling with request queuing |
-| **Real-time Validation** | Form-level and API-level error handling |
-| **Loading States** | Skeleton loaders and spinners throughout |
+| **Responsive Design** | Mobile-ready for ward rounds and field coordinators |
+| **Tailwind UI** | Clean, accessible Ojas design system |
+| **Token Auto-Refresh** | Transparent session handling with request queuing |
+| **Real-time Validation** | Form-level and API-level error feedback |
+| **Loading States** | Skeleton loaders throughout for smooth UX |
 
 </td>
 </tr>
@@ -107,25 +105,25 @@
 ---
 
 ## 🏗️ Architecture
-┌─────────────────────────────────────────────────────────────────┐
-│                        OJAS HEALTHTECH V3                       │
-└─────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                       OJAS HEALTHTECH                        │
+└──────────────────────────────────────────────────────────────┘
 │                      │                      │
 ▼                      ▼                      ▼
 ┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐
-│    🌐 Vercel    │   │   ⚡ Render      │   │  🐘 Supabase    │
-│   (Frontend)    │──▶│   (Backend)     │──▶│  (PostgreSQL)   │
-│                 │   │                 │   │                 │
-│  • React 18     │   │  • FastAPI      │   │  • Async Pooler │
-│  • React Query  │   │  • SQLAlchemy 2 │   │  • Row-Level    │
-│  • Tailwind CSS │   │  • Alembic      │   │    Security     │
+│   🌐 Frontend   │   │   ⚡ Backend     │   │  🐘 Database    │
+│                 │──▶│                 │──▶│                 │
+│  • React 18     │   │  • FastAPI      │   │  • PostgreSQL   │
+│  • React Query  │   │  • SQLAlchemy 2 │   │  • Async Pooler │
+│  • Tailwind CSS │   │  • Alembic      │   │  • AES-256 PII  │
 └─────────────────┘   └─────────────────┘   └─────────────────┘
-│                      │
-▼                      ▼
-┌─────────────────┐   ┌─────────────────┐
-│  💬 360dialog   │   │  🧠 Local AI    │
-│  (WhatsApp API) │   │  (Risk Scoring) │
-└─────────────────┘   └─────────────────┘
+│
+┌─────────────────┼─────────────────┐
+▼                 ▼                 ▼
+┌─────────────────┐ ┌──────────────┐ ┌──────────────────┐
+│  💬 WhatsApp    │ │  🧠 AI Risk  │ │  📄 NABH Reports │
+│  (360dialog)    │ │   Scoring    │ │   (PDF Engine)   │
+└─────────────────┘ └──────────────┘ └──────────────────┘
 
 ---
 
@@ -134,37 +132,34 @@
 ### Prerequisites
 ✅ Node.js 18+
 ✅ Python 3.11+
-✅ PostgreSQL 15+ (or Supabase account)
+✅ PostgreSQL 15+
 
-### 🔧 Backend Setup
+### 🔧 Backend
 
 ```bash
-# Clone repository
+# Clone the repository
 git clone https://github.com/your-org/ojas-healthtech.git
 cd ojas-healthtech/backend
 
 # Create virtual environment
 python -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 
 # Install dependencies
 pip install -r requirements.txt
 
 # Configure environment
 cp .env.example .env
-# ✏️  Edit .env with your DATABASE_URL, SECRET_KEY, ENCRYPTION_KEY
+# ✏️  Fill in your DATABASE_URL, SECRET_KEY, ENCRYPTION_KEY
 
-# Run database migrations
+# Run migrations
 alembic upgrade head
 
-# Seed demo data
-python -c "from seed_data import seed; import asyncio; asyncio.run(seed())"
-
-# Start the server 🚀
+# Start server
 uvicorn app.main:app --reload --port 8000
 ```
 
-### 🎨 Frontend Setup
+### 🎨 Frontend
 
 ```bash
 cd ../frontend
@@ -174,150 +169,110 @@ npm install
 
 # Configure environment
 cp .env.example .env
-# ✏️  Edit .env: VITE_API_URL=http://localhost:8000/api/v1
+# ✏️  Set your API base URL in VITE_API_URL
 
-# Development server
+# Start dev server
 npm run dev
-
-# Production build
-npm run build
 ```
 
-> 💡 Backend runs at `http://localhost:8000` · Frontend at `http://localhost:5173`
+> 💡 Backend: `http://localhost:8000` · Frontend: `http://localhost:5173` · API Docs: `http://localhost:8000/docs` *(dev only)*
 
 ---
 
-## ⚙️ Environment Variables
+## ⚙️ Configuration
 
-### Backend (`backend/.env`)
+All secrets are managed via environment variables. **Never commit `.env` files.**
+
+### Backend
 
 | Variable | Required | Description |
 |---|:---:|---|
-| `DATABASE_URL` | ✅ | `postgresql+asyncpg://...` |
-| `SECRET_KEY` | ✅ | JWT signing key (≥32 chars) |
-| `ENCRYPTION_KEY` | ✅ | AES-256 key (30+ chars, padded to 32) |
-| `ENCRYPTION_SALT` | ✅ | PBKDF2 salt — **never change after encrypting data** |
-| `FRONTEND_URL` | ✅ | CORS origin, no trailing slash |
+| `DATABASE_URL` | ✅ | PostgreSQL async connection string |
+| `SECRET_KEY` | ✅ | JWT signing secret — generate with `openssl rand -hex 32` |
+| `ENCRYPTION_KEY` | ✅ | AES-256 base key for patient PII |
+| `ENCRYPTION_SALT` | ✅ | PBKDF2 salt — **never rotate after initial setup** |
+| `FRONTEND_URL` | ✅ | CORS allowed origin, no trailing slash |
 | `ENVIRONMENT` | ✅ | `development` or `production` |
-| `RESET_KEY` | ✅ | SHA-256 hash for superadmin DB reset |
-| `WHATSAPP_API_KEY` | ❌ | 360dialog API key (simulated if absent) |
-| `DATABASE_USE_NULLPOOL` | ❌ | `true` for Supabase connection pooler |
+| `WHATSAPP_API_KEY` | ❌ | 360dialog key (auto-simulates if absent) |
 
-### Frontend (`frontend/.env`)
+### Frontend
 
 | Variable | Required | Description |
 |---|:---:|---|
-| `VITE_API_URL` | ✅ | Backend URL + `/api/v1` |
+| `VITE_API_URL` | ✅ | Backend base URL pointing to the REST API |
 
 ---
 
-## 👤 Demo Credentials
+## 📡 API Reference
 
-> ⚠️ For development and testing only. Do not use in production.
+> 📘 Full interactive documentation is available at `/docs` (Swagger UI) and `/redoc` when running locally. Endpoint paths are not published here — refer to the internal API docs or contact the team.
 
-| Email | Password | Role | Permissions |
-|---|---|---|---|
-| `admin@ojas.care` | `admin123` | `SUPER_ADMIN` | Full system access |
-| `nurse@cityhospital.com` | `nurse123` | `COORDINATOR` | Patient CRUD, escalations |
-| `dr.gupta@cityhospital.com` | `doctor123` | `DOCTOR` | Read, reports, escalation view |
+### Available Domains
 
----
+| Domain | Description |
+|---|---|
+| **Authentication** | Login, logout, token refresh, user profile |
+| **Patients** | Enrollment, listing, detail view, check-in submission |
+| **Escalations** | Triage listing with AI suggestions, resolution workflow |
+| **Reports** | NABH compliance PDF generation |
 
-## 📡 API Endpoints
+### Authentication
 
-### 🔑 Authentication
+All protected endpoints require a `Bearer` token in the `Authorization` header. Tokens are short-lived — clients should handle automatic refresh transparently.
 
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| `POST` | `/api/v1/auth/login` | Public | Login with JWT tokens |
-| `POST` | `/api/v1/auth/refresh` | Public | Refresh access token |
-| `POST` | `/api/v1/auth/logout` | Bearer | Revoke refresh tokens |
-| `GET` | `/api/v1/auth/me` | Bearer | Current user profile |
-| `POST` | `/api/v1/auth/verify-invite` | Public | Check invite validity |
-| `POST` | `/api/v1/auth/accept-invite` | Public | Create account from invite |
+```http
+Authorization: Bearer <access_token>
+```
 
-### 🏥 Patients
+### Response Format
 
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| `POST` | `/api/v1/patients` | Bearer | Enroll new patient (auto-creates 14 check-ins) |
-| `GET` | `/api/v1/patients` | Bearer | List with pagination, status filter |
-| `GET` | `/api/v1/patients/{id}` | Bearer | Full detail with timeline, check-ins, escalations |
-| `POST` | `/api/v1/patients/{id}/checkin/{day}` | Bearer | Submit check-in with AI risk scoring |
+```json
+{
+  "data": { ... },
+  "message": "Success",
+  "status": 200
+}
+```
 
-### 🚨 Escalations
-
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| `GET` | `/api/v1/escalations` | Bearer | List with AI coach suggestions |
-| `POST` | `/api/v1/escalations/{id}/resolve` | Bearer | Resolve with notes |
-
-### 📄 Reports
-
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| `GET` | `/api/v1/reports/nabh` | Bearer | Download NABH compliance PDF |
-
-### 🛡️ SuperAdmin
-
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| `POST` | `/api/v1/superadmin/hospitals` | SuperAdmin | Create hospital |
-| `GET` | `/api/v1/superadmin/hospitals` | SuperAdmin | List all hospitals |
-| `POST` | `/api/v1/superadmin/hospitals/{id}/invite` | SuperAdmin | Invite user by email |
-| `GET` | `/api/v1/superadmin/audit-logs` | SuperAdmin | Security event trail |
-| `POST` | `/api/v1/superadmin/reset-database` | SuperAdmin | Full reset with `X-Reset-Key` |
+Errors follow standard HTTP status codes with a JSON body containing a `detail` field.
 
 ---
 
-## 🔒 Security Model
+## 🔒 Security
 
-### Encryption
-Algorithm    : AES-256 via Fernet
-Key Derivation: PBKDF2HMAC (SHA-256, 480,000 iterations)
-Salt         : Fixed per-deployment — NEVER rotate
+### Encryption at Rest
 
-**Encrypted Fields:** `full_name` · `mobile` · `family_mobile` · `doctor_name` · `bed_number` · `uhid` · `contact_email` · `contact_phone`
+Patient PII is encrypted using **AES-256** with a hardened key derivation function. Encrypted fields include name, mobile numbers, UHID, bed number, doctor name, and contact details.
 
-> 🔍 Key fingerprint is exposed at `/health` for deployment verification.
+> ⚠️ The `ENCRYPTION_SALT` must remain constant for the lifetime of the database. Changing it without a full re-encryption pass will render all patient data unreadable.
 
 ### Authentication Flow
-Login
-└──► Access Token (15 min) + Refresh Token (7 days, hashed in DB)
+Login → Access Token (short-lived) + Refresh Token (longer-lived, hashed in DB)
 │
-├──► API Calls (Bearer access_token)
-│
-└──► 401 Expired
-└──► POST /auth/refresh → New Access Token
-│
-└──► Refresh Revoked → Redirect to Login
+├── API calls via Bearer token
+└── On 401 → Auto-refresh → On failure → Re-login prompt
 
-### RBAC Permission Matrix
+### Role Hierarchy
 
-| Permission | SUPER_ADMIN | HOSPITAL_ADMIN | COORDINATOR | DOCTOR |
+| Role | Patient Mgmt | Reports | User Mgmt | Hospital Mgmt |
 |---|:---:|:---:|:---:|:---:|
-| `patient:create` | ✅ | ✅ | ✅ | ❌ |
-| `patient:read` | ✅ | ✅ | ✅ | ✅ |
-| `patient:update` | ✅ | ✅ | ✅ | ❌ |
-| `report:generate` | ✅ | ✅ | ❌ | ✅ |
-| `user:manage` | ✅ | ✅ | ❌ | ❌ |
-| `hospital:manage` | ✅ | ❌ | ❌ | ❌ |
+| `SUPER_ADMIN` | ✅ | ✅ | ✅ | ✅ |
+| `HOSPITAL_ADMIN` | ✅ | ✅ | ✅ | ❌ |
+| `COORDINATOR` | ✅ | ❌ | ❌ | ❌ |
+| `DOCTOR` | Read only | ✅ | ❌ | ❌ |
 
 ---
 
 ## 🧪 Testing
 
 ```bash
-# Backend tests with coverage
+# Backend — unit + integration tests
 cd backend
 pytest tests/ -v --cov=app
 
-# Frontend tests
+# Frontend — component tests
 cd frontend
 npm run test
-
-# Load testing
-locust -f locustfile.py --host https://ojas-healthtech.onrender.com
 ```
 
 ---
@@ -328,32 +283,32 @@ locust -f locustfile.py --host https://ojas-healthtech.onrender.com
 <tr>
 <td width="33%">
 
-### ⚡ Render (Backend)
+### ⚡ Backend (Render)
 
-1. Connect GitHub repo to Render
-2. Set environment variables in Render dashboard
-3. Use `render.yaml` for infrastructure-as-code
+1. Connect GitHub repo
+2. Set all env vars in dashboard
+3. Use `render.yaml` for IaC
 4. Health check: `GET /health`
 
 </td>
 <td width="33%">
 
-### 🌐 Vercel (Frontend)
+### 🌐 Frontend (Vercel)
 
-1. Import GitHub repo to Vercel
-2. Set `VITE_API_URL` environment variable
-3. Build command: `npm run build`
-4. Output directory: `dist`
+1. Import GitHub repo
+2. Set `VITE_API_URL` env var
+3. Build: `npm run build`
+4. Output: `dist/`
 
 </td>
 <td width="33%">
 
-### 🐘 Supabase (Database)
+### 🐘 Database (Supabase)
 
-1. Create project in Supabase
-2. Copy connection string with pooler
-3. Set `DATABASE_USE_NULLPOOL=true`
-4. Enable Row Level Security (optional)
+1. Create Supabase project
+2. Use Transaction pooler URL
+3. Enable connection pooling
+4. Enable RLS as needed
 
 </td>
 </tr>
@@ -362,26 +317,25 @@ locust -f locustfile.py --host https://ojas-healthtech.onrender.com
 ---
 
 ## 📁 Project Structure
-Ojas-HealthTech/
+ojas-healthtech/
 ├── backend/
 │   ├── app/
 │   │   ├── core/          # Config, DB, security, encryption, RBAC, audit
-│   │   ├── models/        # SQLAlchemy models
-│   │   ├── routers/       # API endpoints
-│   │   ├── services/      # AI scoring, PDF, WhatsApp
-│   │   └── tasks/         # Async job queues
-│   ├── seed_data.py       # Demo data
+│   │   ├── models/        # SQLAlchemy ORM models
+│   │   ├── routers/       # API route handlers
+│   │   ├── services/      # AI scoring, PDF generation, WhatsApp
+│   │   └── tasks/         # Background job queues
+│   ├── alembic/           # Database migrations
 │   ├── requirements.txt
 │   └── render.yaml
 │
 ├── frontend/
 │   ├── src/
-│   │   ├── api/           # Axios client, React Query hooks
-│   │   ├── components/    # Reusable UI (RiskBadge, EscalationCoach)
-│   │   ├── context/       # AuthContext
-│   │   ├── hooks/         # usePermission
-│   │   ├── pages/         # Route components
-│   │   └── components/layout/  # Sidebar, Layout
+│   │   ├── api/           # HTTP client + data-fetching hooks
+│   │   ├── components/    # Shared UI components
+│   │   ├── context/       # Auth context provider
+│   │   ├── hooks/         # Custom hooks (permissions, etc.)
+│   │   └── pages/         # Route-level page components
 │   ├── index.html
 │   └── vite.config.js
 │
@@ -391,51 +345,37 @@ Ojas-HealthTech/
 
 ## 🤝 Contributing
 
-We welcome contributions from healthcare technologists, security researchers, and UI/UX designers!
+Contributions from healthcare technologists, security researchers, and designers are welcome.
 
 ```bash
-# 1️⃣  Fork the repository
-# 2️⃣  Create your feature branch
-git checkout -b feature/amazing-feature
+# 1. Fork the repository
+# 2. Create your feature branch
+git checkout -b feature/your-feature-name
 
-# 3️⃣  Commit your changes
-git commit -m 'Add amazing feature'
+# 3. Commit using conventional commits
+git commit -m 'feat: add your feature description'
 
-# 4️⃣  Push to branch
-git push origin feature/amazing-feature
-
-# 5️⃣  Open a Pull Request 🎉
+# 4. Push and open a Pull Request
+git push origin feature/your-feature-name
 ```
 
-Please read our [Contributing Guide](CONTRIBUTING.md) and [Code of Conduct](CODE_OF_CONDUCT.md) before submitting.
+Please read [CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) before submitting.
 
 ---
 
 ## 📄 License
 
-This project is licensed under the **Ojas HealthTech Proprietary License** — see the [LICENSE](LICENSE) file for details.
-
----
-
-## 🙏 Acknowledgments
-
-| | Service | Purpose |
-|---|---|---|
-| 🏥 | **NABH** | National Accreditation Board for Hospitals & Healthcare Providers — compliance standards |
-| 💬 | **360dialog** | WhatsApp Business API infrastructure |
-| 🐘 | **Supabase** | Managed PostgreSQL |
-| ⚡ | **Render** | Seamless backend deployment |
-| 🌐 | **Vercel** | Edge-distributed frontend hosting |
+Proprietary — see [LICENSE](LICENSE) for terms. All rights reserved.
 
 ---
 
 <div align="center">
 
-<img width="100%" src="https://capsule-render.vercel.app/api?type=waving&color=0:0e7490,50:0891b2,100:06b6d4&height=120&section=footer"/>
+<img width="100%" src="https://capsule-render.vercel.app/api?type=waving&color=0:14b8a6,50:0d9488,100:0f766e&height=120&section=footer"/>
 
-**Built with ❤️ for better patient outcomes**
+**Built with ❤️ for better patient outcomes across India**
 
-📧 [shivam.shukla1688@gmail.com](mailto:shivam.shukla1688@gmail.com) · 📖 [docs.ojas.care](https://docs.ojas.care) · 📊 [status.ojas.care](https://status.ojas.care)
+📧 [shivam.shukla1688@gmail.com](mailto:shivam.shukla1688@gmail.com) &nbsp;·&nbsp; 📖 [docs.ojas.care](https://docs.ojas.care) &nbsp;·&nbsp; 📊 [status.ojas.care](https://status.ojas.care)
 
 © 2026 Ojas HealthTech. All rights reserved.
 
