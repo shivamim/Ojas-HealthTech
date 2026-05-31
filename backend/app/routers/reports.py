@@ -2,7 +2,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
-from datetime import datetime, date, timezone
+from datetime import datetime, date
 
 from app.core.database import get_db
 from app.core.tenant import require_tenant
@@ -30,7 +30,6 @@ async def generate_nabh_report_endpoint(
     if not effective_hospital_id:
         raise HTTPException(403, "Hospital ID required for report generation")
     
-    # Security: only superadmin can override hospital_id
     if hospital_id and not current_user.is_superadmin():
         raise HTTPException(403, "Only superadmin can specify hospital_id")
     
@@ -71,7 +70,7 @@ async def generate_nabh_report_endpoint(
     pdf_buffer, report_hash = await generate_nabh_report(
         hospital.name,
         start_date.isoformat() if start_date else "2026-01-01",
-        end_date.isoformat() if end_date else datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        end_date.isoformat() if end_date else datetime.utcnow().strftime("%Y-%m-%d"),
         stats,
         current_user.user_id or "system"
     )
