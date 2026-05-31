@@ -2,17 +2,17 @@ import axios from 'axios'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'
 
-console.log('[Ojas API] Connecting to:', API_URL)
-
 const api = axios.create({
   baseURL: API_URL,
-  timeout: 15000,
+  timeout: 30000,   // ← INCREASED from 15000 to 30000
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
   },
   withCredentials: false,
 })
+
+console.log('[Ojas API] Connecting to:', API_URL)
 
 api.interceptors.request.use(
   (config) => {
@@ -37,6 +37,7 @@ api.interceptors.response.use(
   (res) => res,
   async (err) => {
     if (!err.response) {
+      console.error('[API] Network/Timeout error:', err.message, 'Code:', err.code)
       err.isNetworkError = true
       return Promise.reject(err)
     }
@@ -45,6 +46,7 @@ api.interceptors.response.use(
 
     if (err.response?.status === 401 && !original._retry) {
       original._retry = true
+
       const refresh = localStorage.getItem('refresh_token')
       if (!refresh) {
         _clearAuthAndRedirect()
