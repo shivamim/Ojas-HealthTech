@@ -4,8 +4,6 @@ import { useLogin } from '../api/hooks'
 import { useAuth } from '../context/AuthContext'
 import { Stethoscope, Eye, EyeOff, AlertCircle, WifiOff, Loader2 } from 'lucide-react'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'
-
 const Login = () => {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -30,10 +28,7 @@ const Login = () => {
       console.error('[Login] Response:', err.response)
       console.error('[Login] Request:', err.request)
 
-      // TRUE network error: no response received at all
       const isTrueNetworkError = !err.response && err.request && (err.code === 'ECONNABORTED' || err.code === 'ERR_NETWORK' || err.message?.includes('timeout'))
-
-      // Timeout: request was sent but response took too long
       const isTimeout = err.code === 'ECONNABORTED' || err.message?.includes('timeout')
 
       if (isTrueNetworkError && !isTimeout) {
@@ -42,7 +37,6 @@ const Login = () => {
             <WifiOff size={18} className="mt-0.5 shrink-0" />
             <span>
               <strong>Cannot reach backend.</strong><br />
-              API URL: <code className="bg-red-100 px-1 rounded text-xs">{API_URL}</code><br />
               <span className="text-xs">Check your internet or backend status.</span>
             </span>
           </span>
@@ -85,7 +79,7 @@ const Login = () => {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="input"
-                placeholder="admin@ojas.care"
+                placeholder="Enter your email"
               />
             </div>
 
@@ -98,7 +92,7 @@ const Login = () => {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="input pr-10"
-                  placeholder="••••••••"
+                  placeholder="Enter your password"
                 />
                 <button
                   type="button"
@@ -125,15 +119,6 @@ const Login = () => {
               )}
             </button>
           </form>
-
-          <div className="mt-6 pt-6 border-t border-gray-100 space-y-2">
-            <p className="text-xs text-gray-500 text-center">
-              Demo: <span className="font-medium">admin@ojas.care</span> / <span className="font-medium">admin123</span>
-            </p>
-            <p className="text-[10px] text-gray-400 text-center font-mono">
-              API: {API_URL}
-            </p>
-          </div>
         </div>
       </div>
     </div>
