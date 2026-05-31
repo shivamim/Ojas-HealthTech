@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useLogin } from '../api/hooks'
 import { useAuth } from '../context/AuthContext'
-import { Stethoscope, Eye, EyeOff, AlertCircle, WifiOff } from 'lucide-react'
+import { Stethoscope, Eye, EyeOff, AlertCircle, WifiOff, Loader2 } from 'lucide-react'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'
 
@@ -23,19 +23,36 @@ const Login = () => {
       login(data)
       navigate('/dashboard')
     } catch (err) {
-      if (err.isNetworkError || !err.response) {
+      console.error('[Login] Full error:', err)
+      console.error('[Login] Error name:', err.name)
+      console.error('[Login] Error message:', err.message)
+      console.error('[Login] Error code:', err.code)
+      console.error('[Login] Response:', err.response)
+      console.error('[Login] Request:', err.request)
+
+      // TRUE network error: no response received at all
+      const isTrueNetworkError = !err.response && err.request && (err.code === 'ECONNABORTED' || err.code === 'ERR_NETWORK' || err.message?.includes('timeout'))
+
+      // Timeout: request was sent but response took too long
+      const isTimeout = err.code === 'ECONNABORTED' || err.message?.includes('timeout')
+
+      if (isTrueNetworkError && !isTimeout) {
         setError(
           <span className="flex items-start gap-2">
             <WifiOff size={18} className="mt-0.5 shrink-0" />
             <span>
               <strong>Cannot reach backend.</strong><br />
               API URL: <code className="bg-red-100 px-1 rounded text-xs">{API_URL}</code><br />
-              <span className="text-xs">Set VITE_API_URL in Vercel and redeploy.</span>
+              <span className="text-xs">Check your internet or backend status.</span>
             </span>
           </span>
         )
+      } else if (isTimeout) {
+        setError('Request timed out. The server is slow — please try again in a few seconds.')
+      } else if (err.response?.status >= 500) {
+        setError(`Server error (${err.response.status}). Please try again.`)
       } else {
-        setError(err.response?.data?.detail || 'Invalid credentials. Please try again.')
+        setError(err.response?.data?.detail || err.response?.data?.message || 'Invalid credentials. Please try again.')
       }
     }
   }
@@ -99,7 +116,10 @@ const Login = () => {
               className="w-full btn-primary py-2.5 flex items-center justify-center gap-2 disabled:opacity-60"
             >
               {loginMutation.isPending ? (
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <>
+                  <Loader2 size={18} className="animate-spin" />
+                  Signing in...
+                </>
               ) : (
                 'Sign In'
               )}
