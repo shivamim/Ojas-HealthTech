@@ -3,6 +3,7 @@ from app.models.audit_log import AuditLog
 from datetime import datetime, timezone
 import uuid
 
+
 async def log_audit(
     db: AsyncSession, 
     user_id: str, 
@@ -19,14 +20,14 @@ async def log_audit(
         uid = uuid.UUID(user_id) if user_id else None
     except (ValueError, TypeError):
         uid = None
-    
+
     hid = None
     if hospital_id:
         try:
             hid = uuid.UUID(hospital_id)
         except (ValueError, TypeError):
             pass
-    
+
     try:
         log = AuditLog(
             user_id=uid,
@@ -38,7 +39,7 @@ async def log_audit(
             user_agent=user_agent,
             success=success,
             details=details or {},
-            timestamp=datetime.now(timezone.utc)
+            timestamp=datetime.utcnow()   # ← FIXED: was datetime.now(timezone.utc)
         )
         db.add(log)
     except Exception as e:
