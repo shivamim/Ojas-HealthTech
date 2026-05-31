@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from pydantic import BaseModel, Field
-from datetime import datetime, date, timezone
+from datetime import datetime, date
 from typing import Optional
 
 from app.core.database import get_db
@@ -246,7 +246,7 @@ async def submit_checkin(
         raise HTTPException(404, "Checkin not found")
 
     checkin.status = "COMPLETED"
-    checkin.replied_at = datetime.now(timezone.utc)
+    checkin.replied_at = datetime.utcnow()
     checkin.responses = responses or {}
     
     pain_val = responses.get("pain", "0") if responses else "0"
