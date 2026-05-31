@@ -375,7 +375,7 @@ Proprietary — see [LICENSE](LICENSE) for terms. All rights reserved.
 
 **Built with ❤️ for better patient outcomes across India**
 
-📧 [shivam.shukla1688@gmail.com](mailto:shivam.shukla1688@gmail.com) &nbsp;·&nbsp; 📖 [docs.ojas.care](https://docs.ojas.care) &nbsp;·&nbsp; 📊 [status.ojas.care](https://status.ojas.care)
+📧 [team.ojas@outlook.com](mailto:team.ojas@outlook.com) &nbsp;·&nbsp; 📖 [docs.ojas.care](https://docs.ojas.care) &nbsp;·&nbsp; 📊 [status.ojas.care](https://status.ojas.care)
 
 © 2026 Ojas HealthTech. All rights reserved.
 
