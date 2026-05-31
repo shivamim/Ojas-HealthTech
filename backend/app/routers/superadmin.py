@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, text
 from pydantic import BaseModel, EmailStr, Field
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from app.core.database import get_db, engine, Base
 from app.core.rbac import require_superadmin, get_current_user, CurrentUser
@@ -124,7 +124,6 @@ async def invite_user(
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(require_superadmin)
 ):
-    # Verify hospital exists
     h_result = await db.execute(select(Hospital).where(Hospital.id == uuid.UUID(hospital_id)))
     if not h_result.scalar_one_or_none():
         raise HTTPException(404, "Hospital not found")
@@ -135,7 +134,7 @@ async def invite_user(
         email=req.email,
         role=req.role,
         token=token,
-        expires_at=datetime.now(timezone.utc) + timedelta(hours=48),
+        expires_at=datetime.utcnow() + timedelta(hours=48),
         created_by=uuid.UUID(current_user.user_id)
     )
     db.add(invite)
