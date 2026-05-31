@@ -1,5 +1,5 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from datetime import datetime, date
@@ -20,8 +20,8 @@ async def generate_nabh_report_endpoint(
     request: Request, 
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(require_permission(Permission.REPORT_GENERATE)),
-    start_date: date = None, 
-    end_date: date = None,
+    start_date: str = Query(None, description="Start date in YYYY-MM-DD format"),
+    end_date: str = Query(None, description="End date in YYYY-MM-DD format"),
     hospital_id: str = None
 ):
     tenant_id = current_user.require_hospital()
@@ -67,10 +67,29 @@ async def generate_nabh_report_endpoint(
         "feedback_count": int(total * 0.78)
     }
 
+    # Parse and validate dates
+    parsed_start = "2026-01-01"
+    parsed_end = datetime.utcnow().strftime("%Y-%m-%d")
+
+    if start_date:
+        try:
+            # Try parsing as YYYY-MM-DD
+            datetime.strptime(start_date, "%Y-%m-%d")
+            parsed_start = start_date
+        except ValueError:
+            raise HTTPException(422, f"Invalid start_date format: {start_date}. Use YYYY-MM-DD.")
+
+    if end_date:
+        try:
+            datetime.strptime(end_date, "%Y-%m-%d")
+            parsed_end = end_date
+        except ValueError:
+            raise HTTPException(422, f"Invalid end_date format: {end_date}. Use YYYY-MM-DD.")
+
     pdf_buffer, report_hash = await generate_nabh_report(
         hospital.name,
-        start_date.isoformat() if start_date else "2026-01-01",
-        end_date.isoformat() if end_date else datetime.utcnow().strftime("%Y-%m-%d"),
+        parsed_start,
+        parsed_end,
         stats,
         current_user.user_id or "system"
     )
