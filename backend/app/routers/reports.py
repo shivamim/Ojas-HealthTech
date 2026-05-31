@@ -22,15 +22,23 @@ async def generate_nabh_report_endpoint(
     current_user: CurrentUser = Depends(require_permission(Permission.REPORT_GENERATE)),
     start_date: str = Query(None, description="Start date in YYYY-MM-DD format"),
     end_date: str = Query(None, description="End date in YYYY-MM-DD format"),
-    hospital_id: str = None
+    hospital_id: str = Query(None, description="Hospital ID (superadmin only)")
 ):
     tenant_id = current_user.require_hospital()
     effective_hospital_id = hospital_id or tenant_id
     
+    # FIX: SuperAdmin without hospital_id — use first available hospital
+    if not effective_hospital_id and current_user.is_superadmin():
+        result = await db.execute(select(Hospital).where(Hospital.is_active == True).limit(1))
+        first_hospital = result.scalar_one_or_none()
+        if first_hospital:
+            effective_hospital_id = str(first_hospital.id)
+    
     if not effective_hospital_id:
         raise HTTPException(403, "Hospital ID required for report generation")
     
-    if hospital_id and not current_user.is_superadmin():
+    # Security: only superadmin can override hospital_id
+    if hospital_id and hospital_id != tenant_id and not current_user.is_superadmin():
         raise HTTPException(403, "Only superadmin can specify hospital_id")
     
     result = await db.execute(
@@ -73,7 +81,6 @@ async def generate_nabh_report_endpoint(
 
     if start_date:
         try:
-            # Try parsing as YYYY-MM-DD
             datetime.strptime(start_date, "%Y-%m-%d")
             parsed_start = start_date
         except ValueError:
