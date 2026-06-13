@@ -1,0 +1,40 @@
+services:
+  - type: web
+    name: ojas-backend
+    runtime: python
+    plan: starter
+    rootDir: backend          # Tells Render: everything is inside backend/
+    buildCommand: pip install -r requirements.txt
+    # FIX: Add alembic migration step to startup (after setting up alembic)
+    # startCommand: alembic upgrade head && bash render_entrypoint.sh
+    startCommand: bash render_entrypoint.sh
+    healthCheckPath: /health
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: DATABASE_URL
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ENCRYPTION_KEY
+        sync: false
+      - key: ENCRYPTION_SALT
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: RESET_KEY
+        sync: false
+      - key: RATE_LIMIT
+        value: 100/minute
+      # FIX: Increased from 5 to 10 - eliminates connection queueing under load
+      - key: DATABASE_POOL_SIZE
+        value: 10
+      # FIX: Increased from 0 to 20 - allows burst capacity without errors
+      - key: DATABASE_MAX_OVERFLOW
+        value: 20
+      - key: WHATSAPP_API_KEY
+        sync: false
+      - key: WHATSAPP_API_URL
+        value: https://waba.360dialog.io/v1/messages
