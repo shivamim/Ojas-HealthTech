@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../api/client'
 
@@ -15,14 +15,17 @@ export const AuthProvider = ({ children }) => {
       try {
         setUser(JSON.parse(stored))
       } catch (e) {
-        console.error('Failed to parse stored user:', e)
+        if (import.meta.env.DEV) {
+          console.error('Failed to parse stored user:', e)
+        }
         localStorage.removeItem('user')
       }
     }
     setLoading(false)
   }, [])
 
-  const login = (responseOrUser) => {
+  // FIX: useCallback prevents unnecessary re-renders of child components
+  const login = useCallback((responseOrUser) => {
     let userData, accessToken, refreshToken
 
     if (responseOrUser?.access_token) {
@@ -39,13 +42,14 @@ export const AuthProvider = ({ children }) => {
     if (refreshToken) localStorage.setItem('refresh_token', refreshToken)
     localStorage.setItem('user', JSON.stringify(userData))
     setUser(userData)
-  }
+  }, [])
 
-  const logout = async () => {
+  // FIX: useCallback for stable function reference
+  const logout = useCallback(async () => {
     try {
       await api.post('/auth/logout')
     } catch (e) {
-      // Ignore
+      // Ignore - we logout locally regardless
     } finally {
       localStorage.removeItem('access_token')
       localStorage.removeItem('refresh_token')
@@ -53,28 +57,25 @@ export const AuthProvider = ({ children }) => {
       setUser(null)
       navigate('/login')
     }
-  }
+  }, [navigate])
 
-  const isSuperAdmin = user?.role === 'SUPER_ADMIN'
-  const isHospitalAdmin = user?.role === 'HOSPITAL_ADMIN'
-  const isCoordinator = user?.role === 'COORDINATOR'
-  const isDoctor = user?.role === 'DOCTOR'
-  const hasRole = (role) => user?.role === role
-  const isLoggedIn = !!user
+  // FIX: useMemo prevents all consumers from re-rendering when any state changes
+  // Only re-computes when user or loading actually changes
+  const contextValue = useMemo(() => ({
+    user,
+    login,
+    logout,
+    loading,
+    isLoggedIn: !!user,
+    isSuperAdmin: user?.role === 'SUPER_ADMIN',
+    isHospitalAdmin: user?.role === 'HOSPITAL_ADMIN',
+    isCoordinator: user?.role === 'COORDINATOR',
+    isDoctor: user?.role === 'DOCTOR',
+    hasRole: (role) => user?.role === role,
+  }), [user, loading, login, logout])
 
   return (
-    <AuthContext.Provider value={{
-      user,
-      login,
-      logout,
-      loading,
-      isLoggedIn,
-      isSuperAdmin,
-      isHospitalAdmin,
-      isCoordinator,
-      isDoctor,
-      hasRole,
-    }}>
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   )
